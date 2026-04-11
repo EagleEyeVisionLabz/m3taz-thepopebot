@@ -329,13 +329,6 @@ async function init() {
     console.log('  Created .kimi/skills → ../skills/active');
   }
 
-  // Create .agents/skills → ../skills/active symlink
-  const agentsSkillsLink = path.join(cwd, '.agents', 'skills');
-  if (!fs.existsSync(agentsSkillsLink)) {
-    fs.mkdirSync(path.dirname(agentsSkillsLink), { recursive: true });
-    createDirLink('../skills/active', agentsSkillsLink);
-    console.log('  Created .agents/skills → ../skills/active');
-  }
 
   // Report backed-up files
   if (backedUp.length > 0) {

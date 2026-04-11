@@ -255,6 +255,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
     onInteractiveToggle: handleInteractiveToggle,
     togglingMode,
     availableAgents,
+    hasMessages: messages.length > 0,
   };
 
   const handleBranchChange = useCallback((newBranch) => {

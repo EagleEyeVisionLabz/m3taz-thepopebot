@@ -370,16 +370,6 @@ function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, on
   const handleRun = useCallback(async () => {
     if (commandRunning) return;
 
-    // Refresh diff stats and check for changes before running
-    const fresh = await onDiffStatsRefresh?.();
-    const stats = fresh || diffStats;
-    if (!(stats?.insertions || 0) && !(stats?.deletions || 0)) {
-      setDialogOpen(true);
-      setCommandLogs([{ stream: 'stderr', raw: 'You have no changes.', parsed: [{ type: 'text', text: 'You have no changes.' }] }]);
-      setCommandExitCode(1);
-      return;
-    }
-
     setCommandRunning(true);
     setDialogOpen(true);
     setCommandLogs([]);

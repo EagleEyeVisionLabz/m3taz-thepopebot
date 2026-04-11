@@ -140,6 +140,7 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
     if (e) e.preventDefault();
     if (disabled || (!input.trim() && !partialText.trim() && files.length === 0) || isStreaming) return;
     if (canSendOverride !== undefined && !canSendOverride) return;
+    if (isRecording) stopRecording();
     if (partialText) {
       const needsSpace = input && !input.endsWith(' ');
       setInput(input + (needsSpace ? ' ' : '') + partialText);
@@ -352,12 +353,12 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
                     onClick={() => codeModeSettings.onInteractiveToggle()}
                     onContextMenu={(e) => {
                       e.preventDefault();
-                      if (!codeModeSettings.togglingMode && codeModeSettings.availableAgents?.length > 1) {
+                      if (!codeModeSettings.togglingMode && codeModeSettings.availableAgents?.length > 1 && codeModeSettings.hasMessages) {
                         setAgentPickerOpen(prev => !prev);
                       }
                     }}
                     disabled={codeModeSettings.togglingMode || codeModeSettings.isInteractiveActive}
-                    title={codeModeSettings.availableAgents?.length > 1 ? 'Left-click to launch · Right-click to pick agent' : undefined}
+                    title={codeModeSettings.availableAgents?.length > 1 && codeModeSettings.hasMessages ? 'Left-click to launch · Right-click to pick agent' : undefined}
                     className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {codeModeSettings.togglingMode && (

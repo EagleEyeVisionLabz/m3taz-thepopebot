@@ -872,15 +872,6 @@ function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, 
   const handleRun = useCallback(async () => {
     if (commandRunning) return;
 
-    const fresh = await onDiffStatsRefresh?.();
-    const stats = fresh || diffStats;
-    if (!(stats?.insertions || 0) && !(stats?.deletions || 0)) {
-      setDialogOpen(true);
-      setCommandOutput('You have no changes.');
-      setCommandExitCode(1);
-      return;
-    }
-
     setCommandRunning(true);
     setDialogOpen(true);
     setCommandOutput('');
