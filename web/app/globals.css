@@ -128,22 +128,33 @@ body {
   word-break: break-word;
 }
 
-/* Working indicator shimmer — sweeps light blue highlight across muted text */
+/* Working indicator shimmer — sweeps a red-to-white glimmer band across muted text */
 @keyframes thinking-shimmer {
   0% { background-position: 200% center; }
   100% { background-position: -200% center; }
+}
+
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 .thinking-shimmer {
   background: linear-gradient(
     90deg,
     var(--muted-foreground) 0%,
-    hsl(0, 80%, 60%) 50%,
+    var(--muted-foreground) 25%,
+    hsl(0, 80%, 62%) 42%,
+    hsl(0, 20%, 92%) 50%,
+    hsl(0, 80%, 62%) 58%,
+    var(--muted-foreground) 75%,
     var(--muted-foreground) 100%
   );
-  background-size: 200% auto;
+  background-size: 300% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: thinking-shimmer 2s linear infinite;
+  animation:
+    thinking-shimmer 2.5s ease-in-out infinite,
+    thinking-pulse 3s ease-in-out infinite;
 }
