@@ -286,7 +286,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
   }, [workspaceState?.id]);
 
   return (
-    <div className="flex h-svh flex-col">
+    <div className="flex h-svh flex-col overflow-hidden">
       <ChatHeader chatId={chatId} />
       {messages.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center px-2.5 md:px-6">
