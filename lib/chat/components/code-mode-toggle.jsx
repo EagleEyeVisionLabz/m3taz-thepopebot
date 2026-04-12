@@ -242,8 +242,8 @@ export function WorkspaceBar({
                     }).finally(() => setLoadingBranches(false));
                   }
                 }}
-                triggerClassName="font-medium text-foreground hover:text-primary hover:bg-accent transition-colors cursor-pointer truncate text-xs rounded px-1 -mx-1"
-                triggerLabel={<span className="truncate" title={branch}>{branch}</span>}
+                triggerClassName="block w-full text-left font-medium text-foreground hover:text-primary hover:bg-accent transition-colors cursor-pointer truncate text-xs rounded px-1 -mx-1"
+                triggerLabel={<span className="block truncate" title={branch}>{branch}</span>}
               />
             </div>
           </>
