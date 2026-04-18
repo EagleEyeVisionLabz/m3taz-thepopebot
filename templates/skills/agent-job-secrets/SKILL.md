@@ -7,10 +7,10 @@ description: List and retrieve agent secrets. Plain secrets are also available a
 
 ```bash
 # List available secret keys (fetches current list from server)
-node skills/library/agent-job-secrets/agent-job-secrets.js
+node skills/agent-job-secrets/agent-job-secrets.js
 
 # Get a secret value (OAuth credentials are auto-refreshed)
-node skills/library/agent-job-secrets/agent-job-secrets.js get MY_CREDENTIALS
+node skills/agent-job-secrets/agent-job-secrets.js get MY_CREDENTIALS
 ```
 
 ## Notes

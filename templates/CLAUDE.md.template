@@ -8,7 +8,7 @@ This is a [thepopebot](https://github.com/stephengpope/thepopebot) project.
 - **`coding-workspace/`** — Optional system prompt (`SYSTEM.md`) for code mode workspaces. Empty by default.
 - **`agents/`** — Custom agent definitions. Each subdirectory defines an agent (see Managing Agents below).
 - **`event-handler/`** — Event handler configuration: chat system prompts, trigger definitions (`TRIGGERS.json`), cluster templates, and LiteLLM proxy config.
-- **`skills/library/`** — Skill plugins. Activate by symlinking into `skills/active/`.
+- **`skills/`** — Skill plugins. Each subdirectory with a `SKILL.md` is an active skill.
 - **`data/`** — Runtime data (SQLite database, cluster state). Not checked into git.
 - **`logs/`** — Agent job logs, organized by job ID. Not checked into git.
 

@@ -433,7 +433,7 @@ Every agent should register Playwright MCP for browser automation. Method varies
 | Agent | Method |
 |-------|--------|
 | claude-code | `claude mcp add --transport stdio playwright -- npx -y @playwright/mcp@0.0.70 --headless --browser chromium` |
-| pi-coding-agent | Symlinks `playwright-cli` skill from `skills/library/` into `skills/active/` |
+| pi-coding-agent | `playwright-cli` skill available in `skills/` (Pi reads via `.pi/skills` bridge) |
 | opencode | JSON config in `~/.config/opencode/opencode.json` (`mcp.playwright` field) |
 | codex-cli | TOML config in `~/.codex/config.toml` (`[mcp_servers.playwright]`) |
 | gemini-cli | `gemini mcp add playwright npx -y @playwright/mcp@0.0.70 --headless --browser chromium --trust` |

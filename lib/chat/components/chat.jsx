@@ -8,6 +8,7 @@ import { ChatInput } from './chat-input.js';
 import { ChatHeader } from './chat-header.js';
 import { Greeting } from './greeting.js';
 import { RepoBranchPicker, WorkspaceBar } from './code-mode-toggle.js';
+import { ScopePicker } from './scope-picker.js';
 import { DiffViewer } from './diff-viewer.js';
 import { cn } from '../utils.js';
 
@@ -57,6 +58,8 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
   const [diffStats, setDiffStats] = useState(null);
   const [showDiff, setShowDiff] = useState(false);
   const [availableAgents, setAvailableAgents] = useState(null);
+  const [scope, setScope] = useState(null);
+  const [availableScopes, setAvailableScopes] = useState(null);
 
   // Load available coding agents once on mount (for the right-click agent picker)
   useEffect(() => {
@@ -64,6 +67,16 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
       getAvailableCodingAgents().then(agents => setAvailableAgents(agents)).catch(() => {});
     }).catch(() => {});
   }, []);
+
+  // Load available agent scopes for agent mode
+  useEffect(() => {
+    if (!codeMode) {
+      fetch('/chat/scopes')
+        .then(r => r.json())
+        .then(scopes => setAvailableScopes(scopes))
+        .catch(() => setAvailableScopes([]));
+    }
+  }, [codeMode]);
 
   // Fetch default repo for agent mode on mount
   // Uses fetch instead of server action to avoid Next.js page revalidation
@@ -93,8 +106,8 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
     }
   }, [workspaceState?.containerName]);
 
-  const codeModeRef = useRef({ codeMode, codeModeType, repo, branch, workspaceId: workspaceState?.id });
-  codeModeRef.current = { codeMode, codeModeType, repo, branch, workspaceId: workspaceState?.id };
+  const codeModeRef = useRef({ codeMode, codeModeType, repo, branch, workspaceId: workspaceState?.id, scope });
+  codeModeRef.current = { codeMode, codeModeType, repo, branch, workspaceId: workspaceState?.id, scope };
 
   const transport = useMemo(
     () =>
@@ -107,6 +120,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
           repo: codeModeRef.current.repo,
           branch: codeModeRef.current.branch,
           workspaceId: codeModeRef.current.workspaceId,
+          scope: codeModeRef.current.scope || undefined,
         }),
       }),
     [chatId]
@@ -320,6 +334,13 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
                   getRepositories={fetchRepositories}
                   getBranches={fetchBranches}
                   createRepository={fetchCreateRepository}
+                />
+              )}
+              {!codeMode && (
+                <ScopePicker
+                  scope={scope}
+                  onScopeChange={setScope}
+                  scopes={availableScopes}
                 />
               )}
               <div className="flex flex-wrap items-center justify-center gap-3 mt-4">

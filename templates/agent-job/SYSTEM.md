@@ -18,14 +18,14 @@ Everything in the workspace is automatically committed and pushed when your job 
 - `agents/` — Agent definitions. Each subdirectory defines an agent with its own prompts.
 - `agent-job/` — Runtime config: system prompt (`SYSTEM.md`), cron schedules (`CRONS.json`), heartbeat prompt.
 - `event-handler/` — Event handler config. Do not edit — managed by the event handler.
-- `skills/library/` — Skill plugins. Active skills are symlinked into `skills/active/`.
+- `skills/` — Skill plugins. Each subdirectory with a `SKILL.md` is an active skill.
 - `data/`, `logs/` — Runtime data and job logs.
 
 ## What You Can Edit
 
 - `agent-job/CRONS.json` — Add, remove, or change scheduled jobs
 - `agents/` — Create or remove agent definitions
-- `skills/active/` — Activate or deactivate skills via symlinks
+- `skills/` — Add or remove skill directories
 - Agent prompt files (`.md`) in `agent-job/` and `agents/`
 - Reports and output files
 
@@ -43,9 +43,9 @@ Everything in the workspace is automatically committed and pushed when your job 
 
 **Change a schedule** — Edit `agent-job/CRONS.json` (cron expressions, enable/disable).
 
-**Activate a skill** — Symlink from `skills/library/<name>/` into `skills/active/`, update root `CLAUDE.md`.
+**Add a skill** — Create a directory in `skills/` with a `SKILL.md`, update root `CLAUDE.md`.
 
-**Deactivate a skill** — Remove the symlink from `skills/active/`, update root `CLAUDE.md`.
+**Remove a skill** — Delete the directory from `skills/`, update root `CLAUDE.md`.
 
 **Keep CLAUDE.md files current** — When you change the structure of the instance (add/remove agents, change schedules, activate skills), update the root `CLAUDE.md` and any affected folder-level `CLAUDE.md` files so the next agent has an accurate picture.
 

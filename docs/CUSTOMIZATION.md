@@ -120,36 +120,20 @@ Each cron entry requires a `type` field — one of `agent` (spawns a Docker agen
 
 ## Skills
 
-Add custom skills in `skills/library/` and activate them by symlinking into `skills/active/`. Both Pi and Claude Code discover skills from the same shared directory. Skills extend the agent's capabilities with specialized tools and behaviors.
+Skills live in `skills/`. Each subdirectory with a `SKILL.md` is an active skill. All coding agents discover skills from the same `skills/` directory via symlink bridges (`.claude/skills`, `.pi/skills`, etc.).
 
 Each skill has a `SKILL.md` with YAML frontmatter (`name`, `description`) that the agent reads to understand when and how to use it.
 
-### Default Active Skills
+### Default Skills
 
-These are activated out of the box:
-
-| Skill | Description |
-|-------|-------------|
-| `get-secret` | List available LLM-accessible credentials |
-
-### Available Skills
-
-These ship with the package but must be activated manually:
+These ship with the package:
 
 | Skill | Description |
 |-------|-------------|
-| `brave-search` | Web search and content extraction via Brave Search API |
-| `google-docs` | Create and manage Google Docs on a shared drive via service account |
-| `google-drive` | Interact with Google Drive shared drives via service account |
-| `kie-ai` | Generate images and videos using kie.ai API |
-| `youtube-transcript` | Fetch transcripts from YouTube videos for summarization and analysis |
+| `agent-job-secrets` | List and retrieve agent secrets |
+| `playwright-cli` | Browser automation via Playwright CLI |
 
-To activate a skill:
-
-```bash
-cd skills/active
-ln -s ../library/skill-name skill-name
-```
+To add a custom skill, create a directory in `skills/` with a `SKILL.md`. To remove, delete the directory.
 
 ---
 

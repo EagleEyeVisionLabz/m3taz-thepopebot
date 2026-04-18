@@ -19,6 +19,7 @@ services:
     volumes:
       - .:/project
       - ./agent-job:/app/agent-job
+      - ./agents:/app/agents
       - ./event-handler:/app/event-handler
       - ./skills:/app/skills
       - ./.env:/app/.env

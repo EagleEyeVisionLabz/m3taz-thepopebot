@@ -277,56 +277,21 @@ async function init() {
     }
   }
 
-  // Create default skill activation symlinks
-  const defaultSkills = [];
-  const activeDir = path.join(cwd, 'skills', 'active');
-  fs.mkdirSync(activeDir, { recursive: true });
-  for (const skill of defaultSkills) {
-    const symlink = path.join(activeDir, skill);
-    if (!fs.existsSync(symlink)) {
-      createDirLink(`../library/${skill}`, symlink);
-      console.log(`  Created skills/active/${skill} → ../library/${skill}`);
+  // Create agent skill bridge symlinks (point to ../skills)
+  const skillBridges = [
+    { dir: '.pi', name: 'Pi' },
+    { dir: '.claude', name: 'Claude' },
+    { dir: '.codex', name: 'Codex' },
+    { dir: '.gemini', name: 'Gemini' },
+    { dir: '.kimi', name: 'Kimi' },
+  ];
+  for (const { dir, name } of skillBridges) {
+    const link = path.join(cwd, dir, 'skills');
+    if (!fs.existsSync(link)) {
+      fs.mkdirSync(path.dirname(link), { recursive: true });
+      createDirLink('../skills', link);
+      console.log(`  Created ${dir}/skills → ../skills`);
     }
-  }
-
-  // Create .pi/skills → ../skills/active symlink
-  const piSkillsLink = path.join(cwd, '.pi', 'skills');
-  if (!fs.existsSync(piSkillsLink)) {
-    fs.mkdirSync(path.dirname(piSkillsLink), { recursive: true });
-    createDirLink('../skills/active', piSkillsLink);
-    console.log('  Created .pi/skills → ../skills/active');
-  }
-
-  // Create .claude/skills → ../skills/active symlink
-  const claudeSkillsLink = path.join(cwd, '.claude', 'skills');
-  if (!fs.existsSync(claudeSkillsLink)) {
-    fs.mkdirSync(path.dirname(claudeSkillsLink), { recursive: true });
-    createDirLink('../skills/active', claudeSkillsLink);
-    console.log('  Created .claude/skills → ../skills/active');
-  }
-
-  // Create .codex/skills → ../skills/active symlink
-  const codexSkillsLink = path.join(cwd, '.codex', 'skills');
-  if (!fs.existsSync(codexSkillsLink)) {
-    fs.mkdirSync(path.dirname(codexSkillsLink), { recursive: true });
-    createDirLink('../skills/active', codexSkillsLink);
-    console.log('  Created .codex/skills → ../skills/active');
-  }
-
-  // Create .gemini/skills → ../skills/active symlink
-  const geminiSkillsLink = path.join(cwd, '.gemini', 'skills');
-  if (!fs.existsSync(geminiSkillsLink)) {
-    fs.mkdirSync(path.dirname(geminiSkillsLink), { recursive: true });
-    createDirLink('../skills/active', geminiSkillsLink);
-    console.log('  Created .gemini/skills → ../skills/active');
-  }
-
-  // Create .kimi/skills → ../skills/active symlink
-  const kimiSkillsLink = path.join(cwd, '.kimi', 'skills');
-  if (!fs.existsSync(kimiSkillsLink)) {
-    fs.mkdirSync(path.dirname(kimiSkillsLink), { recursive: true });
-    createDirLink('../skills/active', kimiSkillsLink);
-    console.log('  Created .kimi/skills → ../skills/active');
   }
 
 

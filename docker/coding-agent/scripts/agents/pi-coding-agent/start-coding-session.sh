@@ -16,5 +16,6 @@ fi
 PI_ARGS="$PI_ARGS --session-dir /home/coding-agent/.pi-ttyd-sessions/${PORT} -c"
 
 # Start tmux session with Pi, then attach
-tmux -u new-session -d -s "$SESSION_NAME" -e PORT="${PORT}" -c /home/coding-agent/workspace $PI_ARGS
+WORK_DIR="/home/coding-agent/workspace${SCOPE:+/$SCOPE}"
+tmux -u new-session -d -s "$SESSION_NAME" -e PORT="${PORT}" -c "$WORK_DIR" $PI_ARGS
 exec tmux attach -t "$SESSION_NAME"

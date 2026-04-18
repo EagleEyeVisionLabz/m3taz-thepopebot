@@ -23,5 +23,6 @@ if [ -f "$SESSION_FILE" ]; then
 fi
 
 # Start tmux session with Gemini, then attach
-tmux -u new-session -d -s "$SESSION_NAME" -e PORT="${PORT}" -c /home/coding-agent/workspace $GEMINI_ARGS
+WORK_DIR="/home/coding-agent/workspace${SCOPE:+/$SCOPE}"
+tmux -u new-session -d -s "$SESSION_NAME" -e PORT="${PORT}" -c "$WORK_DIR" $GEMINI_ARGS
 exec tmux attach -t "$SESSION_NAME"

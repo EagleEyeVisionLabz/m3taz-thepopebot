@@ -1,14 +1,14 @@
 # skills/ — Agent Skills
 
-Skills are lightweight plugins that extend agent abilities. Each skill lives in `skills/library/<skill-name>/` and is activated by symlinking into `skills/active/`.
+Skills are lightweight plugins that extend agent abilities. Each skill lives in `skills/<skill-name>/`.
 
 ## How Skills Work
 
-1. **Discovery** — The system scans `skills/active/` for directories containing `SKILL.md`.
+1. **Discovery** — The system scans `skills/` for directories containing `SKILL.md`.
 2. **Frontmatter loaded** — The `description` from YAML frontmatter is included in the system prompt under "Active skills" (via the `{{skills}}` template variable).
 3. **Full SKILL.md read on demand** — When the agent decides to use a skill, it reads the full `SKILL.md` for detailed usage instructions.
 
-Both Pi and Claude Code discover skills from the same `skills/active/` directory (via `.pi/skills` and `.claude/skills` symlink bridges).
+All coding agents discover skills from the same `skills/` directory (via `.pi/skills`, `.claude/skills`, etc. symlink bridges).
 
 ## Conventions
 
@@ -48,12 +48,12 @@ description: One sentence describing what the skill does and when to use it.
 ## Usage
 
 ```bash
-skills/library/skill-name/script.sh <args>
+skills/skill-name/script.sh <args>
 ```
 ```
 
 - The `description` field appears in the system prompt — keep it concise and action-oriented.
-- Use project-root-relative paths in documentation (e.g., `skills/library/skill-name/script.sh`).
+- Use project-root-relative paths in documentation (e.g., `skills/skill-name/script.sh`).
 
 ### Skill Structure
 
@@ -67,27 +67,21 @@ If a skill needs an API key, add it via the admin UI (Settings > Agent Jobs > Se
 
 ### Activation & Deactivation
 
-```bash
-# Activate
-ln -s ../library/skill-name skills/active/skill-name
+Skills are active when present in the `skills/` directory. To deactivate, remove or move the skill directory out.
 
-# Deactivate
-rm skills/active/skill-name
-```
-
-The `skills/active/` directory is shared by both agent backends via symlink bridges:
-- `.claude/skills → skills/active`
-- `.pi/skills → skills/active`
+All coding agents discover skills from the same `skills/` directory via symlink bridges:
+- `.claude/skills → ../skills`
+- `.pi/skills → ../skills`
 
 ## Creating a Skill
 
 ### Simple bash skill (most common)
 
 ```bash
-mkdir skills/library/my-skill
+mkdir skills/my-skill
 ```
 
-**skills/library/my-skill/SKILL.md:**
+**skills/my-skill/SKILL.md:**
 ```markdown
 ---
 name: my-skill
@@ -101,11 +95,11 @@ Requires MY_API_KEY environment variable.
 
 ## Usage
 ```bash
-skills/library/my-skill/run.sh <args>
+skills/my-skill/run.sh <args>
 ```
 ```
 
-**skills/library/my-skill/run.sh:**
+**skills/my-skill/run.sh:**
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -115,10 +109,9 @@ if [ -z "$MY_API_KEY" ]; then echo "Error: MY_API_KEY not set"; exit 1; fi
 # ... skill logic
 ```
 
-Then make it executable and activate:
+Then make it executable:
 ```bash
-chmod +x skills/library/my-skill/run.sh
-ln -s ../library/my-skill skills/active/my-skill
+chmod +x skills/my-skill/run.sh
 ```
 
 ### Node.js skill
@@ -131,4 +124,4 @@ Always build AND test a skill in the same job. Tell the agent to test with real 
 
 ## Default Skills
 
-Check `skills/library/` for available built-in skills. Activate any you need by symlinking into `skills/active/`.
+Check `skills/` for available built-in skills (e.g., `agent-job-secrets`, `playwright-cli`).
