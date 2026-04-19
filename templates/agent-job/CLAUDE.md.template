@@ -26,7 +26,9 @@ There are three action types:
 }
 ```
 
-Optional: add `"llm_provider"` and `"llm_model"` to override the default LLM for that job.
+Optional fields:
+- `"scope"` (e.g. `"agents/my-agent"`) — routes the cron to a scoped agent. Its `SYSTEM.md`, skills directory, and working directory all switch to that subdirectory. See `agents/CLAUDE.md` for the full pattern.
+- `"llm_provider"` and `"llm_model"` — override the default LLM for that job.
 
 **`command`** — Runs a shell command on the event handler (working directory: project root).
 
