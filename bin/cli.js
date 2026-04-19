@@ -651,6 +651,7 @@ const PROTECTED_PATHS = [
   '.kimi/',
   '.pi/',
   'skills/',
+  'agents/',
   'node_modules/',
 ];
 
