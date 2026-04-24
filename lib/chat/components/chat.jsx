@@ -64,7 +64,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
   const [diffStats, setDiffStats] = useState(null);
   const [showDiff, setShowDiff] = useState(false);
   const [availableAgents, setAvailableAgents] = useState(null);
-  const [scope, setScope] = useState(null);
+  const [scope, setScope] = useState(workspace?.scope || null);
   const [availableScopes, setAvailableScopes] = useState(null);
 
   // Load available coding agents once on mount (for the right-click agent picker)

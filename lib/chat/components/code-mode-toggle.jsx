@@ -226,7 +226,7 @@ export function WorkspaceBar({
         {branch && (
           <>
             <span className="shrink-0 text-muted-foreground/30 hidden md:inline">/</span>
-            <div className="min-w-0 max-w-[120px] md:max-w-[160px]">
+            <div className="min-w-0">
               <Combobox
                 options={branches.map((b) => ({ value: b.name, label: b.name }))}
                 value={branch}
@@ -243,13 +243,13 @@ export function WorkspaceBar({
                     }).finally(() => setLoadingBranches(false));
                   }
                 }}
-                triggerClassName="max-w-full text-left font-medium text-foreground hover:text-primary hover:bg-accent transition-colors cursor-pointer truncate text-xs rounded px-1 -mx-1"
-                triggerLabel={<span className="truncate" title={branch}>{branch}</span>}
+                triggerClassName="inline-block max-w-[70px] md:max-w-[160px] text-left font-medium text-foreground hover:text-primary hover:bg-accent transition-colors cursor-pointer truncate text-xs rounded px-1 -mx-1 align-middle"
+                triggerLabel={<span title={branch}>{branch}</span>}
               />
             </div>
           </>
         )}
-        {featureBranch && (
+        {featureBranch && featureBranch !== branch && (
           <>
             <span className="shrink-0 text-muted-foreground/50">&larr;</span>
             <span className="text-primary truncate min-w-0 cursor-default" title={featureBranch}>{featureBranch}</span>
