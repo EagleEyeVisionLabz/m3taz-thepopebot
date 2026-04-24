@@ -1,15 +1,16 @@
 # lib/ai/sdk-adapters/ — SDK Adapter System
 
-In-process SDK adapters that replace the legacy LangGraph + Docker path for chat. Each adapter wraps a coding agent's SDK and yields a unified chunk stream consumed by `chatStream()` in `lib/ai/index.js`.
+In-process SDK adapters that run a coding agent's SDK directly (no container) and yield a unified chunk stream consumed by `chatStream()` in `lib/ai/index.js`. Used when the active coding agent has a registered adapter; otherwise `chatStream()` uses the direct headless-container path.
 
 ## Architecture
 
 ```
 Browser → POST /stream/chat (api.js)
   → chatStream() (index.js)
+    → workspace setup (ensureWorkspaceRepo)
     → getSdkAdapter() returns adapter function or null
-    → if adapter: workspace setup → SDK adapter streaming → DB persistence
-    → if null: falls back to legacy LangGraph/Docker path
+    → if adapter: streamViaSdk — in-process SDK call, yields normalized chunks
+    → if null:    streamViaContainer — headless Docker container, parseHeadlessStream yields chunks
 ```
 
 The adapter is a pure stream translator — it receives a prompt and options, calls the SDK, and yields normalized chunks. Everything else (workspace setup, DB persistence, session continuity, system prompts) is handled by `chatStream()` in `index.js`.

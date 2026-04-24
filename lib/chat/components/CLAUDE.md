@@ -29,7 +29,11 @@ Admin pages live under `/admin/` with two top-level sections:
 
 `tool-names.js` auto-generates display names from the tool's snake_case name (split on `_`, capitalize each word). No map to maintain — adding a new tool automatically gets a display name.
 
-This file is **UI-only** — it controls display text, not which tools are available. Tool-to-agent assignment lives in `lib/ai/agent.js`.
+This file is **UI-only** — it controls display text. There is no host-side tool registry; every tool name in the UI comes from the coding agent's own stream (e.g. `Read`, `Bash`, `Edit`) plus the synthetic `workspace` setup tool emitted by `chatStream()`.
+
+## Error Messages
+
+`chatStream()` emits `{ type: 'error', message }` on failure. `lib/chat/api.js` writes it as an AI SDK `data-error` part; `chat-page.jsx` rehydrates stored errors into the same part shape on refresh; `message.jsx` renders `data-error` parts as a red banner using `text-destructive` / `border-destructive/30 bg-destructive/5`. Errors persist to the `messages` table as JSON (`{"type":"error","message":"..."}`).
 
 ## Settings UI Standards
 

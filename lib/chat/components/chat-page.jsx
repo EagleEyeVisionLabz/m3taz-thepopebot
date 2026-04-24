@@ -75,6 +75,9 @@ export function ChatPage({ session, needsSetup, chatId }) {
               const parsed = JSON.parse(msg.content);
               if (parsed?.type === 'tool-invocation') {
                 parts = [parsed];
+              } else if (parsed?.type === 'error') {
+                // Rehydrate error messages as data-error parts (matches live stream shape)
+                parts = [{ type: 'data-error', data: { message: parsed.message } }];
               } else {
                 parts = [{ type: 'text', text: msg.content }];
               }

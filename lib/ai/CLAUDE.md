@@ -1,44 +1,60 @@
 # lib/ai/ — LLM Integration
 
-## Agent Types
+## Architecture
 
-Two agent singletons, both using `createReactAgent` from `@langchain/langgraph/prebuilt` with `SqliteSaver` for conversation memory:
+Every chat message flows through `chatStream()` in `index.js`. After workspace setup, it forks on whether a registered SDK adapter exists for the active coding agent:
 
-**Agent Chat** — singleton via `getAgentChat()`:
-- System prompt: `event-handler/agent-chat/SYSTEM.md` (rendered fresh each invocation via `render_md()`)
-- Tools: `agent_job`, `coding_agent`
-- Call `resetAgentChats()` to clear both singletons (required if hot-reloading)
+- **SDK path** (`streamViaSdk`) — in-process `@anthropic-ai/claude-agent-sdk` via `sdk-adapters/claude-code.js`. Used only when `CODING_AGENT=claude-code`.
+- **Direct path** (`streamViaContainer`) — spawns the configured coding agent in an ephemeral headless Docker container via `runHeadlessContainer()`. Streams output through `parseHeadlessStream()`. Used for every agent without an SDK adapter (pi, codex, gemini, opencode, kimi).
 
-**Code Chat** — singleton via `getCodeChat()`:
-- System prompt: `event-handler/code-chat/SYSTEM.md` (rendered fresh each invocation)
-- Tools: `coding_agent` (reads repo/branch/workspace from `runtime.configurable`)
+Both paths yield the same normalized chunk shape and use the same DB persistence pattern. There is no LangGraph React agent and no intermediate LLM between the user's message and the agent.
 
-## Adding a New Tool
+## Multi-Turn Memory
 
-1. Define in `tools.js` with Zod schema (use `tool()` from `@langchain/core/tools`)
-2. Add to the agent's tools array in `agent.js`
-3. Call `resetAgentChats()` if the agent needs to pick up the new tool without restart
+Neither path persists conversation context at the LangChain/LangGraph layer — that layer is gone. Memory lives where the coding agent naturally keeps it:
+
+- **SDK path** — session ID captured from the SDK's `meta` chunk and written via `session-manager.js` (`{workspaceBaseDir}/.claude-ttyd-sessions/7681`). Passed back into the SDK on the next turn.
+- **Direct path** — `runHeadlessContainer()` passes `CONTINUE_SESSION=1` into the container. Each agent's `run.sh` reads its own port-keyed session file and resumes natively (see `docker/coding-agent/CLAUDE.md` § Session Tracking).
 
 ## Chat Modes
 
-Two primary chat modes stored in `chats.chatMode`:
+`chats.chatMode` is either `'agent'` or `'code'`:
 
-**Agent mode** (`chatMode: 'agent'`) — Tools: `agent_job`, `coding_agent`. Three sub-modes selected per-chat via `codeModeType` (stored in client localStorage):
-- **plan** — `coding_agent` runs in read-only permission mode
-- **code** — `coding_agent` runs in write (dangerous) permission mode
-- **job** — `agent_job` dispatches autonomous Docker container task
+- **Agent mode** (`chatMode: 'agent'`) — repo/branch defaulted from `GH_OWNER`/`GH_REPO`, `main` branch, agent job secrets injected, system prompt built from `event-handler/agent-chat/SYSTEM.md` with scope-resolved skills.
+- **Code mode** (`chatMode: 'code'`) — user-selected repo/branch, no secret injection, system prompt from `event-handler/code-chat/SYSTEM.md`.
 
-**Code mode** (`chatMode: 'code'`) — Tool: `coding_agent` only (operates on user's selected repo). Sub-modes: plan and code (no job).
+Per-chat sub-mode via `codeModeType`:
+- **plan** — `PERMISSION=plan` (read-only).
+- **code** — `PERMISSION=code` (write/dangerous).
 
-The `[chat mode: X]` suffix is appended to user messages in `index.js` so the LLM knows which tool to invoke. `codeModeType` flows through `runtime.configurable` to tools, which map it to Docker's `PERMISSION` env var (`plan` or `code`).
+The "job" sub-mode is no longer wired — a skill will replace autonomous job dispatch.
 
-## Model Resolution
+## Chunk Shape
 
-`createModel()` in `model.js` resolves provider/model at agent creation time (singleton for chat agent). Provider determined by `LLM_PROVIDER` config, model by `LLM_MODEL`. Changing these requires restart (or `resetAgentChats()`).
+`chatStream()` yields normalized chunks consumed by `lib/chat/api.js`:
+
+- `{ type: 'text', text }`
+- `{ type: 'tool-call', toolCallId, toolName, args }`
+- `{ type: 'tool-result', toolCallId, result }`
+- `{ type: 'error', message }` — surfaced to the UI as a red message and persisted for refresh
+- `{ type: 'meta', ... }`, `{ type: 'result', ... }` — internal, not emitted to client
+- `{ type: 'thinking-start' | 'thinking' | 'thinking-end' }` — SDK path only
+
+## Workspace Setup
+
+`ensureWorkspaceRepo()` (workspace-setup.js) is called before either path runs. It clones the repo, sets git identity, and checks out/creates the feature branch on the host — agent-agnostic. The container's `2_clone.sh` is a no-op when `.git` already exists.
+
+On the first message in a new chat, `chatStream` yields a visible `tool-call`/`tool-result` pair with `toolName: 'workspace'` so the setup appears in the UI.
+
+## Utility LLM Calls
+
+`createModel()` in `model.js` remains LangChain-based for two utility calls: `autoTitle()` (2-5 word chat title on first message) and `summarizeAgentJob()` (webhook-triggered PR merge summary). These use `LLM_PROVIDER` + `LLM_MODEL` configured via `/admin/event-handler/chat`.
+
+Phase 2 will replace `createModel()` with a tiny fetch-based multi-provider client (or route utility calls through the active coding agent's credentials) and drop the remaining `@langchain/*` dependencies.
 
 ### LLM Providers
 
-Source of truth: `lib/llm-providers.js` (`BUILTIN_PROVIDERS`). Each provider declares credentials, available models, and capability flags (`chat`, `codingAgent`) that gate which models appear in which UI contexts.
+Source of truth: `lib/llm-providers.js` (`BUILTIN_PROVIDERS`).
 
 | Provider | `LLM_PROVIDER` | Default Model | Required Key |
 |----------|----------------|---------------|-------------|
@@ -52,49 +68,31 @@ Source of truth: `lib/llm-providers.js` (`BUILTIN_PROVIDERS`). Each provider dec
 | Kimi | `kimi` | `kimi-k2.5` | `MOONSHOT_API_KEY` |
 | OpenRouter | `openrouter` | (user-specified) | `OPENROUTER_API_KEY` |
 
-All credentials are stored in the settings DB (encrypted), not `.env`. Configured via `/admin/event-handler/llms` (credentials) and `/admin/event-handler/chat` (model selection).
+All credentials are stored in the settings DB (encrypted). `LLM_MAX_TOKENS` defaults to 4096.
 
-**Custom providers**: Users can add OpenAI-compatible providers via the admin UI. Stored as `type: 'llm_provider'` in the settings table. Resolved in `model.js` via `getCustomProvider()`.
+**Custom providers**: users can add OpenAI-compatible providers via `/admin/event-handler/llms`. Stored as `type: 'llm_provider'` in the settings table. Resolved in `model.js` via `getCustomProvider()`.
 
-`LLM_MAX_TOKENS` defaults to 4096.
-
-> **Google model compatibility note:** `gemini-2.5-pro` and `gemini-3.*` models require `thought_signature` round-tripping that `@langchain/google-genai` doesn't support. Auto-falls back to `gemini-2.5-flash` with a warning (issue #201).
-
-## Chat Streaming
-
-`chatStream()` in `index.js` yields chunks: `{ type: 'text', content }`, `{ type: 'tool-call', name, args }`, `{ type: 'tool-result', name, result }`. Called by `lib/chat/api.js` (the `/stream/chat` endpoint).
+> **Google model compatibility note:** `gemini-2.5-pro` and `gemini-3.*` require `thought_signature` round-tripping that `@langchain/google-genai` doesn't support. Auto-falls back to `gemini-2.5-flash` (issue #201).
 
 ## Headless Stream Parser (headless-stream.js)
 
-Three-layer parser for Claude Code agents running in headless Docker containers:
+Three-layer parser consumed by the direct path:
 
-1. **Docker frame decoder** — Parses 8-byte multiplexed stream headers (type + size), extracts stdout frames, discards stderr. Buffers incomplete frames across chunks.
-2. **NDJSON splitter** — Accumulates decoded UTF-8, splits on newlines. Holds incomplete trailing lines for next chunk.
-3. **Event mapper** (`mapLine()`) — Converts each line to chat events:
+1. **Docker frame decoder** — parses 8-byte multiplexed stream headers (type + size), extracts stdout frames, discards stderr.
+2. **NDJSON splitter** — accumulates decoded UTF-8 and splits on newlines.
+3. **Event mapper** (`mapLine()`) — converts each line to chat events:
    - `assistant` messages: `text` blocks → `{ type: 'text' }`, `tool_use` blocks → `{ type: 'tool-call' }`
-   - `user` messages: `tool_result` blocks → `{ type: 'tool-result' }` (priority: stdout > string content > array)
-   - `result` messages: → `{ type: 'text' }` (final summary from the agent)
+   - `user` messages: `tool_result` blocks → `{ type: 'tool-result' }` (priority: stdout > string > array)
+   - `result` messages: → `{ type: 'text' }` (final summary)
    - Non-JSON lines (e.g. `NO_CHANGES`, `AGENT_FAILED`): wrapped as plain text events
 
-`parseHeadlessStream(dockerLogStream)` is an async generator consuming `http.IncomingMessage`. `mapLine()` is also reused by `lib/cluster/stream.js` for worker log parsing.
-
-### Tool Return Format
-
-The `coding_agent` tool (in `tools.js`) returns the **full container session** as a flat JSON array. This becomes the ToolMessage in LangGraph's checkpoint, giving the LLM complete context on the current turn. The array contains:
-
-- `{ type: 'meta', codingAgent, backendApi }` — first event, agent identity
-- `{ type: 'text', text }` — agent text output
-- `{ type: 'tool-call', toolCallId, toolName, args }` — agent tool invocations
-- `{ type: 'tool-result', toolCallId, result }` — tool execution results
-- `{ type: 'exit', exitCode }` — last event, container exit status
-
-On error before streaming starts: `[{ type: 'error', message }]`.
+`mapLine()` is also reused by `lib/cluster/stream.js` for worker log parsing.
 
 ### Adding a New Agent Mapper (line-mappers.js)
 
-Each coding agent CLI has its own mapper function (`mapClaudeCodeLine`, `mapPiLine`, `mapGeminiLine`, `mapCodexLine`, `mapOpenCodeLine`, `mapKimiLine`). When adding a new agent:
+Each coding agent CLI has its own mapper (`mapClaudeCodeLine`, `mapPiLine`, `mapGeminiLine`, `mapCodexLine`, `mapOpenCodeLine`, `mapKimiLine`). To add one:
 
-1. Create `mapXxxLine(parsed)` in `line-mappers.js` that returns an array of `{ type, ... }` events
-2. Register it in `headless-stream.js`: add to imports, re-exports, and the `mapperMap` object
-3. Map the agent's JSON output to three event types: `{ type: 'text', text }`, `{ type: 'tool-call', toolCallId, toolName, args }`, `{ type: 'tool-result', toolCallId, result }`
-4. Return `[{ type: 'skip' }]` for noise events (session init, rate limits, etc.) to suppress them without triggering the unknown fallback
+1. Create `mapXxxLine(parsed)` in `line-mappers.js` that returns an array of `{ type, ... }` events.
+2. Register it in `headless-stream.js`: imports, re-exports, and the `mapperMap` object.
+3. Map the agent's JSON output to the chunk shape above.
+4. Return `[{ type: 'skip' }]` for noise events to suppress them without triggering the unknown fallback.

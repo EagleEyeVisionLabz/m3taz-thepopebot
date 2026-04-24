@@ -269,7 +269,7 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
                 <PaperclipIcon size={16} />
               </button>
 
-              {/* Plan/Code/Job dropdown */}
+              {/* Plan/Code dropdown */}
               {codeModeSettings && (
                 <div className="relative" ref={dropdownRef}>
                   <button
@@ -279,12 +279,10 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
                       'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
                       codeModeSettings.mode === 'code'
                         ? 'bg-green-500/15 text-green-500 hover:bg-green-500/25'
-                        : codeModeSettings.mode === 'job'
-                          ? 'bg-blue-500/15 text-blue-500 hover:bg-blue-500/25'
-                          : 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+                        : 'bg-destructive/10 text-destructive hover:bg-destructive/20'
                     )}
                   >
-                    {codeModeSettings.mode === 'code' ? 'Code' : codeModeSettings.mode === 'job' ? 'Job' : 'Plan'} &#9662;
+                    {codeModeSettings.mode === 'code' ? 'Code' : 'Plan'} &#9662;
                   </button>
                   {modeDropdownOpen && (
                     <div className="absolute bottom-full left-0 mb-1 rounded-lg border border-border bg-background shadow-lg py-1 min-w-[100px] z-50">
@@ -308,18 +306,6 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
                       >
                         Code
                       </button>
-                      {!codeMode && (
-                        <button
-                          type="button"
-                          onClick={() => { codeModeSettings.onModeChange('job'); setModeDropdownOpen(false); }}
-                          className={cn(
-                            'w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors',
-                            codeModeSettings.mode === 'job' ? 'text-blue-500 font-medium' : 'text-foreground'
-                          )}
-                        >
-                          Job
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>

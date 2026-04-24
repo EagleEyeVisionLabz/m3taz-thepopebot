@@ -435,6 +435,21 @@ export function PreviewMessage({ message, isLoading, onRetry, onEdit }) {
                           const afterTool = prevPart?.type?.startsWith('tool-');
                           return <Streamdown key={i} className={afterTool ? 'mt-3' : undefined} mode={isLoading ? 'streaming' : 'static'} linkSafety={linkSafety}>{part.text}</Streamdown>;
                         }
+                        if (part.type === 'data-error') {
+                          const prevPart = message.parts[i - 1];
+                          const afterContent = prevPart?.type === 'text' || prevPart?.type?.startsWith('tool-');
+                          return (
+                            <div
+                              key={i}
+                              className={cn(
+                                'rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive whitespace-pre-wrap break-words',
+                                afterContent && 'mt-3'
+                              )}
+                            >
+                              {part.data?.message || 'An error occurred'}
+                            </div>
+                          );
+                        }
                         if (part.type === 'file') {
                           if (part.mediaType?.startsWith('image/')) {
                             return (

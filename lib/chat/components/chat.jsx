@@ -40,7 +40,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
   const [codeModeType, setCodeModeType] = useState(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(`codeModeType:${chatId}`);
-      if (stored === 'plan' || stored === 'code' || stored === 'job') return stored;
+      if (stored === 'plan' || stored === 'code') return stored;
     }
     return 'code';
   });
@@ -272,6 +272,10 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
     hasMessages: messages.length > 0,
   };
 
+  const defaultPlaceholder = codeMode
+    ? 'Send a message...'
+    : `Send message to /${scope || ''}`;
+
   const handleBranchChange = useCallback((newBranch) => {
     setBranch(newBranch);
     if (workspaceState?.id) {
@@ -320,6 +324,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
                 stop={stop}
                 files={files}
                 setFiles={setFiles}
+                placeholder={defaultPlaceholder}
                 codeMode={codeMode}
                 codeModeSettings={codeModeSettings}
               />
@@ -436,7 +441,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
                     files={files}
                     setFiles={setFiles}
                     disabled={isInteractiveActive}
-                    placeholder={isInteractiveActive ? 'Interactive mode is active.' : 'Send a message...'}
+                    placeholder={isInteractiveActive ? 'Interactive mode is active.' : defaultPlaceholder}
                     className={workspaceState ? "rounded-t-none" : undefined}
                     codeMode={codeMode}
                     codeModeSettings={codeModeSettings}
@@ -488,7 +493,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
                   files={files}
                   setFiles={setFiles}
                   disabled={isInteractiveActive}
-                  placeholder={isInteractiveActive ? 'Interactive mode is active.' : 'Send a message...'}
+                  placeholder={isInteractiveActive ? 'Interactive mode is active.' : defaultPlaceholder}
                   className={workspaceState ? "rounded-t-none" : undefined}
                   codeMode={codeMode}
                   codeModeSettings={codeModeSettings}
