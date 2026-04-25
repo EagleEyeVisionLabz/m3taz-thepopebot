@@ -1,20 +1,42 @@
 # docker/ — Docker Images & Compose
 
-## Images
+## Image hierarchy
 
-All tagged `stephengpope/thepopebot:{tag}-{version}`. A unified `coding-agent` base image supports multiple agents and runtimes:
+All tagged `stephengpope/thepopebot:{tag}-{version}`. Two-layer base structure so the event-handler and coding-agent containers share the same Linux + Node + Chromium toolchain. The in-process Claude SDK in event-handler shells out to the same binaries that interactive coding-agent containers do.
+
+```
+thepopebot-base                           ← Ubuntu 24.04 + Node 22 + locale + Chromium + playwright + coding-agent user
+  ├── coding-agent-base                   ← + tmux, ttyd, agent-job scripts, entrypoint
+  │     ├── coding-agent-claude-code      ← + per-agent CLI binary
+  │     ├── coding-agent-pi-coding-agent
+  │     ├── coding-agent-codex-cli
+  │     ├── coding-agent-gemini-cli
+  │     ├── coding-agent-opencode
+  │     └── coding-agent-kimi-cli
+  └── event-handler                       ← + pm2, gosu, Next.js runtime, server.js
+```
 
 | Image | Lifecycle | Purpose |
 |-------|-----------|---------|
-| `event-handler` | Long-lived | Next.js server. Installs npm package from npm, user project volume-mounted at `/app`, PM2 process manager |
-| `coding-agent-claude-code` | Ephemeral/Long-lived | Unified coding agent: agent-job, headless, interactive, cluster-worker, and command runtimes |
+| `thepopebot-base` | Build-only | Shared base. Ubuntu + Node + locale + Chromium + playwright + coding-agent UID 1001 |
+| `coding-agent-base` | Build-only | Coding-agent specifics on top of base. Per-agent images extend this |
+| `event-handler` | Long-lived | Next.js server. Volume-mounts `/app`, runs PM2 |
+| `coding-agent-claude-code` | Ephemeral/Long-lived | Unified coding agent: agent-job, headless, interactive, cluster-worker, command runtimes |
 | `coding-agent-pi-coding-agent` | Ephemeral/Long-lived | Pi coding agent variant |
 | `coding-agent-codex-cli` | Ephemeral/Long-lived | OpenAI Codex CLI variant |
 | `coding-agent-gemini-cli` | Ephemeral/Long-lived | Google Gemini CLI variant |
 | `coding-agent-opencode` | Ephemeral/Long-lived | OpenCode variant |
 | `coding-agent-kimi-cli` | Ephemeral/Long-lived | Kimi CLI variant |
 
-All `coding-agent-*` images extend a shared `coding-agent-base-{version}` image (built first by `bin/docker-build.js`). Per-agent script structure (auth, setup, run, interactive, start-coding-session, merge-back) is documented in `docker/coding-agent/CLAUDE.md`.
+Build order (enforced by `bin/docker-build.js` and `.github/workflows/publish-npm.yml`):
+
+1. `thepopebot-base`
+2. `coding-agent-base` + `event-handler` in parallel (both extend thepopebot-base)
+3. All `coding-agent-*` variants in parallel (extend coding-agent-base)
+
+Per-agent script structure (auth, setup, run, interactive, start-coding-session, merge-back) is documented in `docker/coding-agent/CLAUDE.md`.
+
+The event-handler Dockerfile is multi-stage: Stages 1+2 stay on `node:22-bookworm-slim` (lean throwaway environments for `npm install` + `next build`); Stage 3 (the deployed runtime) extends `thepopebot-base`. node_modules and `.next` are built on bookworm and copied into the Ubuntu runtime stage — better-sqlite3 / sharp prebuilds are glibc-forward-compatible so this works.
 
 ## Docker Compose
 

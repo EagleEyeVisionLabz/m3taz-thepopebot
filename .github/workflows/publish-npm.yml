@@ -50,9 +50,38 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  # ─── Job 2a: Build & push coding-agent base image ───
-  build-base-image:
+  # ─── Job 2a: Build & push thepopebot-base (shared by event-handler + coding-agent-base) ───
+  build-thepopebot-base:
     needs: [publish-staging]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push thepopebot-base
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/base
+          file: docker/base/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: stephengpope/thepopebot:thepopebot-base-${{ needs.publish-staging.outputs.version }}
+          cache-from: type=gha,scope=thepopebot-base
+          cache-to: type=gha,mode=max,scope=thepopebot-base
+
+  # ─── Job 2b: Build & push coding-agent-base (extends thepopebot-base) ───
+  build-coding-agent-base:
+    needs: [publish-staging, build-thepopebot-base]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,12 +105,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: stephengpope/thepopebot:coding-agent-base-${{ needs.publish-staging.outputs.version }}
+          build-args: |
+            BASE_IMAGE=stephengpope/thepopebot:thepopebot-base-${{ needs.publish-staging.outputs.version }}
           cache-from: type=gha,scope=coding-agent-base
           cache-to: type=gha,mode=max,scope=coding-agent-base
 
-  # ─── Job 2b: Build & push coding agent images ───
+  # ─── Job 2c: Build & push coding agent images (extend coding-agent-base) ───
   build-coding-agents:
-    needs: [publish-staging, build-base-image]
+    needs: [publish-staging, build-coding-agent-base]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -126,9 +157,9 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
-  # ─── Job 2c: Build & push event-handler image (parallel with coding agents) ───
+  # ─── Job 2d: Build & push event-handler (extends thepopebot-base, parallel with coding-agent-base) ───
   build-event-handler:
-    needs: [publish-staging]
+    needs: [publish-staging, build-thepopebot-base]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -152,6 +183,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: stephengpope/thepopebot:event-handler-${{ needs.publish-staging.outputs.version }}
+          build-args: |
+            BASE_IMAGE=stephengpope/thepopebot:thepopebot-base-${{ needs.publish-staging.outputs.version }}
           cache-from: type=gha,scope=event-handler
           cache-to: type=gha,mode=max,scope=event-handler
 
@@ -274,8 +307,8 @@ jobs:
 
   # ─── Job 5: Clean up if Docker builds fail ───
   cleanup-on-failure:
-    needs: [publish-staging, build-base-image, build-coding-agents, build-event-handler]
-    if: always() && needs.publish-staging.result == 'success' && (needs.build-base-image.result != 'success' || needs.build-coding-agents.result != 'success' || needs.build-event-handler.result != 'success')
+    needs: [publish-staging, build-thepopebot-base, build-coding-agent-base, build-coding-agents, build-event-handler]
+    if: always() && needs.publish-staging.result == 'success' && (needs.build-thepopebot-base.result != 'success' || needs.build-coding-agent-base.result != 'success' || needs.build-coding-agents.result != 'success' || needs.build-event-handler.result != 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: read

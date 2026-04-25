@@ -1,97 +1,25 @@
-FROM ubuntu:24.04
+# coding-agent base — extends thepopebot-base with interactive-workspace
+# specifics (tmux, ttyd, agent-job scripts, entrypoint).
+#
+# Per-agent images (Dockerfile.claude-code, Dockerfile.pi-coding-agent, etc.)
+# extend this image and add the agent's CLI binary on top.
+ARG BASE_IMAGE=thepopebot-base
+FROM ${BASE_IMAGE}
 
-ENV DEBIAN_FRONTEND=noninteractive
+USER root
 
-# ──────────────────────────────────────────────
-# System packages (superset of all runtimes)
-# ──────────────────────────────────────────────
-RUN apt-get update && apt-get install -y \
-    # Core
-    git \
-    curl \
-    jq \
-    procps \
-    ca-certificates \
-    gnupg \
-    build-essential \
-    locales \
-    # Interactive (workspace runtime)
-    tmux \
-    # Emoji rendering (workspace runtime)
-    fonts-noto-color-emoji \
-    fonts-symbola \
-    # Playwright Chromium system deps
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libxkbcommon0 \
-    libatspi2.0-0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2t64 \
-    libpango-1.0-0 \
-    libcairo2 \
+# tmux for terminal multiplexing inside ttyd sessions
+RUN apt-get update && apt-get install -y --no-install-recommends tmux \
     && rm -rf /var/lib/apt/lists/*
 
-# Locale
-RUN locale-gen en_US.UTF-8
-ENV LANG=en_US.UTF-8
-ENV LC_ALL=en_US.UTF-8
-ENV LC_CTYPE=en_US.UTF-8
-
-# ──────────────────────────────────────────────
-# GitHub CLI
-# ──────────────────────────────────────────────
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update && apt-get install -y gh \
-    && rm -rf /var/lib/apt/lists/*
-
-# ──────────────────────────────────────────────
-# ttyd (web terminal — used by workspace runtime)
-# ──────────────────────────────────────────────
+# ttyd — web terminal server for interactive workspace runtime
 RUN curl -fsSL -o /usr/local/bin/ttyd \
         https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 \
     && chmod +x /usr/local/bin/ttyd
 
-# ──────────────────────────────────────────────
-# Node.js 22
-# ──────────────────────────────────────────────
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-# ──────────────────────────────────────────────
-# Non-root user
-# ──────────────────────────────────────────────
-RUN useradd -m -s /bin/bash -u 1001 coding-agent \
-    && mkdir -p /home/coding-agent/workspace \
+# Workspace dir for the coding-agent user
+RUN mkdir -p /home/coding-agent/workspace \
     && chown coding-agent:coding-agent /home/coding-agent/workspace
-
-# ──────────────────────────────────────────────
-# playwright-cli + Chromium (used by playwright-cli skill across all agents)
-# ──────────────────────────────────────────────
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
-RUN npm install -g @playwright/cli@0.1.3 \
-    && npx playwright install chromium \
-    && chown -R coding-agent:coding-agent /opt/pw-browsers
-
-# Bake default config so `playwright-cli open` works with zero flags.
-# Config sets chromium browser, headless, and routes artifacts to /tmp
-# (outside workspace) to avoid git pollution.
-RUN mkdir -p /etc/playwright \
-    && echo '{"browser":{"browserName":"chromium","launchOptions":{"headless":true,"args":["--no-sandbox"]}},"outputDir":"/tmp"}' \
-       > /etc/playwright/cli.config.json
-ENV PLAYWRIGHT_MCP_CONFIG=/etc/playwright/cli.config.json
 
 # ──────────────────────────────────────────────
 # Copy scripts, commands, and configs

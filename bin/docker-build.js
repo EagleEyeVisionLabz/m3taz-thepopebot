@@ -1,19 +1,32 @@
 #!/usr/bin/env node
 
 /**
- * Build all Docker images locally (in parallel).
+ * Build all Docker images locally.
  *
  * Usage:
- *   npm run docker:build            # build all images in parallel
- *   npm run docker:build -- --image event-handler   # build one image
+ *   npm run docker:build            # build everything
+ *   npm run docker:build -- --image event-handler   # build one (deps built first)
  *
  * Reads the version from package.json and tags each image as:
  *   stephengpope/thepopebot:{image}-{version}
  *
- * The coding-agent images use a two-stage build: a shared base image
- * (Dockerfile) is built first, then each agent-specific Dockerfile
- * extends it. The base is tagged as coding-agent-base-{version} and
- * is NOT pushed — it's only used locally as a build dependency.
+ * Image hierarchy:
+ *
+ *   thepopebot-base                           ← Ubuntu + Node + locale + Chromium + playwright + user
+ *     ├── coding-agent-base                   ← + tmux, ttyd, scripts, entrypoint
+ *     │     ├── coding-agent-claude-code      ← + per-agent CLI
+ *     │     ├── coding-agent-pi-coding-agent
+ *     │     └── ... (one per agent)
+ *     └── event-handler                       ← + pm2, gosu, Next.js, server.js
+ *
+ * Build order:
+ *   1. thepopebot-base
+ *   2. coding-agent-base + event-handler in parallel
+ *   3. all coding-agent variants in parallel
+ *
+ * Base images are tagged both versioned and unversioned (no version) so child
+ * Dockerfiles can `FROM thepopebot-base` / `FROM coding-agent-base` without a
+ * build-arg for local development.
  */
 
 import { spawn } from 'child_process';
@@ -28,14 +41,21 @@ const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const VERSION = pkg.version;
 const REPO = 'stephengpope/thepopebot';
 
-// Base image built first — all coding-agent images depend on it
-const BASE_IMAGE = {
+// Built first — everything depends on this.
+const THEPOPEBOT_BASE = {
+  name: 'thepopebot-base',
+  context: 'docker/base',
+  dockerfile: 'docker/base/Dockerfile',
+};
+
+// Built second — depends on thepopebot-base.
+const CODING_AGENT_BASE = {
   name: 'coding-agent-base',
   context: 'docker/coding-agent',
   dockerfile: 'docker/coding-agent/Dockerfile',
 };
 
-// Agent-specific images (extend the base)
+// Built third — depend on coding-agent-base.
 const CODING_AGENTS = [
   {
     name: 'coding-agent-claude-code',
@@ -69,16 +89,14 @@ const CODING_AGENTS = [
   },
 ];
 
-// Non-coding-agent images (independent, built in parallel)
-const OTHER_IMAGES = [
-  {
-    name: 'event-handler',
-    context: '.',
-    dockerfile: 'docker/event-handler/Dockerfile',
-  },
-];
+// Built second — depends on thepopebot-base. Built in parallel with coding-agent-base.
+const EVENT_HANDLER = {
+  name: 'event-handler',
+  context: '.',
+  dockerfile: 'docker/event-handler/Dockerfile',
+};
 
-const ALL_IMAGES = [BASE_IMAGE, ...CODING_AGENTS, ...OTHER_IMAGES];
+const ALL_IMAGES = [THEPOPEBOT_BASE, CODING_AGENT_BASE, ...CODING_AGENTS, EVENT_HANDLER];
 
 // Parse --image flag
 const filterArg = process.argv.find((_, i, a) => a[i - 1] === '--image');
@@ -101,11 +119,14 @@ function buildImage(img) {
   console.log(`  ${label}  building — ${tag}`);
 
   return new Promise((resolve, reject) => {
-    // Tag base image as both versioned and unversioned (agent Dockerfiles use FROM coding-agent-base)
     const args = ['build', '-t', tag, '-f', dockerfile];
-    if (img.name === 'coding-agent-base') {
-      args.push('-t', 'coding-agent-base');
+
+    // Base images get an unversioned tag too so child Dockerfiles can
+    // `FROM thepopebot-base` / `FROM coding-agent-base` without a build-arg.
+    if (img.name === 'thepopebot-base' || img.name === 'coding-agent-base') {
+      args.push('-t', img.name);
     }
+
     args.push(context);
 
     const proc = spawn(
@@ -172,50 +193,56 @@ function buildImage(img) {
   });
 }
 
-// Build logic: base first, then agents + others in parallel
 async function run() {
   if (filterArg) {
-    // Single image build
-    if (filterArg === BASE_IMAGE.name) {
+    // Single image build — build dependency chain too.
+    if (filterArg === THEPOPEBOT_BASE.name) {
       console.log(`Building 1 image — version ${VERSION}\n`);
-      await buildImage(BASE_IMAGE);
-    } else {
-      const isCodingAgent = CODING_AGENTS.some(img => img.name === filterArg);
-      if (isCodingAgent) {
-        // Need base first
-        console.log(`Building base + 1 agent image — version ${VERSION}\n`);
-        await buildImage(BASE_IMAGE);
-        const agent = CODING_AGENTS.find(img => img.name === filterArg);
-        await buildImage(agent);
-      } else {
-        console.log(`Building 1 image — version ${VERSION}\n`);
-        const img = OTHER_IMAGES.find(img => img.name === filterArg);
-        await buildImage(img);
-      }
+      await buildImage(THEPOPEBOT_BASE);
+    } else if (filterArg === CODING_AGENT_BASE.name) {
+      console.log(`Building 2 images — version ${VERSION}\n`);
+      await buildImage(THEPOPEBOT_BASE);
+      await buildImage(CODING_AGENT_BASE);
+    } else if (filterArg === EVENT_HANDLER.name) {
+      console.log(`Building 2 images — version ${VERSION}\n`);
+      await buildImage(THEPOPEBOT_BASE);
+      await buildImage(EVENT_HANDLER);
+    } else if (CODING_AGENTS.some(img => img.name === filterArg)) {
+      console.log(`Building 3 images — version ${VERSION}\n`);
+      await buildImage(THEPOPEBOT_BASE);
+      await buildImage(CODING_AGENT_BASE);
+      const agent = CODING_AGENTS.find(img => img.name === filterArg);
+      await buildImage(agent);
     }
-    console.log('\n1/1 images built successfully.');
+    console.log('\ndone.');
     return;
   }
 
-  // Full build: base first, then everything else in parallel
+  // Full build: thepopebot-base → (coding-agent-base + event-handler in parallel) → variants
   const totalCount = ALL_IMAGES.length;
-  console.log(`Building ${totalCount} images (base first, then parallel) — version ${VERSION}\n`);
+  console.log(`Building ${totalCount} images — version ${VERSION}\n`);
 
-  // Step 1: Build base
-  await buildImage(BASE_IMAGE);
+  // Step 1: thepopebot-base
+  await buildImage(THEPOPEBOT_BASE);
 
-  // Step 2: Build all agents + other images in parallel
-  const parallel = [...CODING_AGENTS, ...OTHER_IMAGES];
-  const results = await Promise.allSettled(parallel.map(buildImage));
+  // Step 2: coding-agent-base and event-handler in parallel (both extend thepopebot-base)
+  const tier2 = await Promise.allSettled([CODING_AGENT_BASE, EVENT_HANDLER].map(buildImage));
+  const tier2Failed = tier2.filter(r => r.status === 'rejected');
+  if (tier2Failed.length > 0) {
+    console.error(`Tier 2 failed: ${tier2Failed.map(r => r.reason.message).join(', ')}`);
+    process.exit(1);
+  }
 
-  const failed = results.filter((r) => r.status === 'rejected');
-  const succeeded = results.filter((r) => r.status === 'fulfilled');
+  // Step 3: all coding-agent variants in parallel
+  const tier3 = await Promise.allSettled(CODING_AGENTS.map(buildImage));
+  const tier3Failed = tier3.filter(r => r.status === 'rejected');
+  const tier3Succeeded = tier3.filter(r => r.status === 'fulfilled');
 
-  // +1 for the base image
-  console.log(`\n${succeeded.length + 1}/${totalCount} images built successfully.`);
+  const succeededCount = 1 + 2 + tier3Succeeded.length;
+  console.log(`\n${succeededCount}/${totalCount} images built successfully.`);
 
-  if (failed.length > 0) {
-    console.error(`${failed.length} failed: ${failed.map((r) => r.reason.message).join(', ')}`);
+  if (tier3Failed.length > 0) {
+    console.error(`${tier3Failed.length} failed: ${tier3Failed.map(r => r.reason.message).join(', ')}`);
     process.exit(1);
   }
 }

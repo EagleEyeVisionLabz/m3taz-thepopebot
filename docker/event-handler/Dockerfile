@@ -1,4 +1,11 @@
+# Global ARG — must be declared before the first FROM to be usable in
+# Stage 3's FROM ${BASE_IMAGE}. ARGs declared between stages don't apply.
+ARG BASE_IMAGE=thepopebot-base
+
 # ── Stage 1: builder ──────────────────────────────────────────────
+# node:22-bookworm-slim is fine here — this stage is throwaway, just compiles
+# native modules. Stage 3 (runtime) extends thepopebot-base for cross-distro
+# parity with coding-agent containers.
 FROM node:22-bookworm-slim AS builder
 
 RUN apt-get update && \
@@ -24,79 +31,23 @@ COPY web/ ./
 RUN ./node_modules/.bin/next build
 
 # ── Stage 3: runtime ─────────────────────────────────────────────
-FROM node:22-bookworm-slim
+# Extends thepopebot-base — Ubuntu 24.04 + Node 22 + locale + jq + Chromium
+# stack + playwright-cli + coding-agent user, all shared with coding-agent
+# containers so the in-process SDK has the same toolchain.
+FROM ${BASE_IMAGE}
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl git ca-certificates && \
-    install -m 0755 -d /etc/apt/keyrings && \
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
-    chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-      > /etc/apt/sources.list.d/github-cli.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends gh && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN npm install -g pm2
-
-# Run as coding-agent (UID 1001) so files created by in-process SDK
-# are natively owned by the same user as interactive coding agent containers.
-# gosu for dropping to coding-agent at runtime after fixing socket perms.
+# Event-handler-specific: process manager and privilege-drop helper.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gosu && \
-    rm -rf /var/lib/apt/lists/* && \
-    useradd -m -s /bin/bash -u 1001 coding-agent
-
-# Agent runtime parity with the coding-agent base image. The in-process SDK
-# shells out to these inside this container; without them, chat-mode agents hit
-# "command not found" for tools their system prompt advertises.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        jq \
-        procps \
-        locales \
-        build-essential \
-        fonts-noto-color-emoji \
-        fonts-symbola \
-        libnss3 \
-        libnspr4 \
-        libatk1.0-0 \
-        libatk-bridge2.0-0 \
-        libcups2 \
-        libdrm2 \
-        libdbus-1-3 \
-        libxkbcommon0 \
-        libatspi2.0-0 \
-        libxcomposite1 \
-        libxdamage1 \
-        libxfixes3 \
-        libxrandr2 \
-        libgbm1 \
-        libasound2 \
-        libpango-1.0-0 \
-        libcairo2 && \
-    rm -rf /var/lib/apt/lists/* && \
-    locale-gen en_US.UTF-8
-
-ENV LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
-    LC_CTYPE=en_US.UTF-8
-
-# playwright-cli + Chromium for the playwright-cli skill. Mirror the
-# coding-agent setup: install browser to /opt/pw-browsers (outside /home) and
-# bake a default config so `playwright-cli open` works with zero flags.
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
-RUN npm install -g @playwright/cli@0.1.3 && \
-    npx playwright install chromium && \
-    chown -R coding-agent:coding-agent /opt/pw-browsers
-
-RUN mkdir -p /etc/playwright && \
-    echo '{"browser":{"browserName":"chromium","launchOptions":{"headless":true,"args":["--no-sandbox"]}},"outputDir":"/tmp"}' \
-       > /etc/playwright/cli.config.json
-ENV PLAYWRIGHT_MCP_CONFIG=/etc/playwright/cli.config.json
+    rm -rf /var/lib/apt/lists/*
+RUN npm install -g pm2
 
 WORKDIR /app
+# Chown the /app dir itself so coding-agent can create files inside it (e.g.,
+# data/db on first boot). This is just the directory's metadata, not its
+# contents — no layer duplication.
+RUN chown coding-agent:coding-agent /app
+
 # Set ownership at copy time. Docker layers are immutable, so a post-copy
 # `chown -R /app` would rewrite every file into a new layer (~1.7GB duplicate).
 # `--chown=` avoids the duplicate by setting ownership during the COPY itself.
