@@ -97,11 +97,13 @@ RUN mkdir -p /etc/playwright && \
 ENV PLAYWRIGHT_MCP_CONFIG=/etc/playwright/cli.config.json
 
 WORKDIR /app
-COPY --from=builder /app/node_modules ./node_modules
-RUN echo '{"private":true}' > package.json
-COPY --from=nextjs /app/.next ./.next
-COPY web/server.js web/next.config.mjs web/instrumentation.js web/middleware.js web/postcss.config.mjs ./
-RUN chown -R coding-agent:coding-agent /app
+# Set ownership at copy time. Docker layers are immutable, so a post-copy
+# `chown -R /app` would rewrite every file into a new layer (~1.7GB duplicate).
+# `--chown=` avoids the duplicate by setting ownership during the COPY itself.
+COPY --chown=coding-agent:coding-agent --from=builder /app/node_modules ./node_modules
+RUN echo '{"private":true}' > package.json && chown coding-agent:coding-agent package.json
+COPY --chown=coding-agent:coding-agent --from=nextjs /app/.next ./.next
+COPY --chown=coding-agent:coding-agent web/server.js web/next.config.mjs web/instrumentation.js web/middleware.js web/postcss.config.mjs ./
 
 COPY docker/event-handler/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
