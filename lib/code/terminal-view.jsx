@@ -842,31 +842,54 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
   );
 }
 
-const STORAGE_KEY = 'thepopebot-workspace-command:code';
+const STORAGE_KEY = 'thepopebot-workspace-command';
+const FALLBACK_BY_MODE = { agent: 'push', code: 'create-pr' };
 
 function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, onShowDiff }) {
+  // Resolve chatMode from the workspace's chat (matches code-mode-toggle's per-mode behavior).
+  // Defaults to 'code' until the fetch resolves, since code workspaces are most often code-mode.
+  const [chatMode, setChatMode] = useState('code');
+
+  useEffect(() => {
+    if (!codeWorkspaceId) return;
+    let cancelled = false;
+    fetch(`/code/${codeWorkspaceId}/chat-data`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.chatMode) setChatMode(data.chatMode);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [codeWorkspaceId]);
+
+  const storageKey = `${STORAGE_KEY}:${chatMode}`;
   const [selectedCommand, setSelectedCommandState] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEY) || 'create-pr'; } catch { return 'create-pr'; }
+    try { return localStorage.getItem(storageKey) || FALLBACK_BY_MODE[chatMode] || 'create-pr'; }
+    catch { return FALLBACK_BY_MODE[chatMode] || 'create-pr'; }
   });
   const setSelectedCommand = (cmd) => {
     setSelectedCommandState(cmd);
-    try { localStorage.setItem(STORAGE_KEY, cmd); } catch {}
+    try { localStorage.setItem(storageKey, cmd); } catch {}
   };
 
-  // Seed from admin default if user hasn't picked anything for code mode yet.
+  // When chatMode resolves (or changes), reload preference from its storage key, then seed from admin default if unset.
   useEffect(() => {
     let stored = null;
-    try { stored = localStorage.getItem(STORAGE_KEY); } catch {}
-    if (stored) return;
+    try { stored = localStorage.getItem(storageKey); } catch {}
+    if (stored) {
+      setSelectedCommandState(stored);
+      return;
+    }
     let cancelled = false;
     import('../chat/actions.js').then(({ getModeGitActionDefault }) => {
-      getModeGitActionDefault('code').then((val) => {
+      getModeGitActionDefault(chatMode).then((val) => {
         if (cancelled || !val) return;
         setSelectedCommandState(val);
       }).catch(() => {});
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [chatMode, storageKey]);
   const [commandRunning, setCommandRunning] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [commandOutput, setCommandOutput] = useState('');
