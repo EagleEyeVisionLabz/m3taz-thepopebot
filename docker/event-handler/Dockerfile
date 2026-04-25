@@ -48,6 +48,54 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     useradd -m -s /bin/bash -u 1001 coding-agent
 
+# Agent runtime parity with the coding-agent base image. The in-process SDK
+# shells out to these inside this container; without them, chat-mode agents hit
+# "command not found" for tools their system prompt advertises.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        jq \
+        procps \
+        locales \
+        build-essential \
+        fonts-noto-color-emoji \
+        fonts-symbola \
+        libnss3 \
+        libnspr4 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
+        libcups2 \
+        libdrm2 \
+        libdbus-1-3 \
+        libxkbcommon0 \
+        libatspi2.0-0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxrandr2 \
+        libgbm1 \
+        libasound2 \
+        libpango-1.0-0 \
+        libcairo2 && \
+    rm -rf /var/lib/apt/lists/* && \
+    locale-gen en_US.UTF-8
+
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    LC_CTYPE=en_US.UTF-8
+
+# playwright-cli + Chromium for the playwright-cli skill. Mirror the
+# coding-agent setup: install browser to /opt/pw-browsers (outside /home) and
+# bake a default config so `playwright-cli open` works with zero flags.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+RUN npm install -g @playwright/cli@0.1.3 && \
+    npx playwright install chromium && \
+    chown -R coding-agent:coding-agent /opt/pw-browsers
+
+RUN mkdir -p /etc/playwright && \
+    echo '{"browser":{"browserName":"chromium","launchOptions":{"headless":true,"args":["--no-sandbox"]}},"outputDir":"/tmp"}' \
+       > /etc/playwright/cli.config.json
+ENV PLAYWRIGHT_MCP_CONFIG=/etc/playwright/cli.config.json
+
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 RUN echo '{"private":true}' > package.json
