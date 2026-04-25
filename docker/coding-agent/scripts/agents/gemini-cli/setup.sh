@@ -23,6 +23,7 @@ TRUST
 # UUID via --list-sessions and writes it to a port-keyed file.
 cat > /home/coding-agent/.gemini-ttyd-sessions-hook.sh << 'EOF'
 #!/bin/bash
+if [ "$CONTINUE_SESSION" != "1" ]; then echo '{}' >&1; exit 0; fi
 SFILE=$(find /home/coding-agent/.gemini/tmp/workspace/chats -name "session-*.json" -type f 2>/dev/null | sort -r | head -1)
 if [ -n "$SFILE" ]; then
   SHORT=$(basename "$SFILE" .json | rev | cut -d'-' -f1 | rev)

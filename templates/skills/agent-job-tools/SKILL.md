@@ -1,6 +1,6 @@
 ---
 name: agent-job-tools
-description: Use when the user wants to run an agent job in the background (also "background job", "spawn a job", "kick off a job") — creates and monitors background agent jobs that run in their own container. Also provides access to agent-job secrets (list keys, get values; OAuth credentials are auto-refreshed).
+description: Use when you need to access agent secrets, API keys, or create and manage background jobs. Supports listing keys and retrieving values, with OAuth credentials auto-refreshed. Also handles requests to "create a background job," "spawn a job," or "kick off an agent job."
 ---
 
 ## Usage

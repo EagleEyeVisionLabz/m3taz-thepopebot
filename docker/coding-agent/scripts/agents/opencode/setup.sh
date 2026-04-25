@@ -31,6 +31,7 @@ EOF
 
 cat > "${WORKSPACE_DIR}/.opencode/plugins/session-tracker.mjs" << 'PLUGIN'
 export const SessionTracker = async ({ $ }) => {
+  if (process.env.CONTINUE_SESSION !== "1") return {};
   const fs = await import("fs");
   const path = await import("path");
   const dir = "/home/coding-agent/.opencode-ttyd-sessions";

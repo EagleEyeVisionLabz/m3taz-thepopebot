@@ -20,6 +20,7 @@ fi
 # Writes Kimi session_id to .kimi-ttyd-sessions/${PORT:-7681}
 cat > /home/coding-agent/.kimi-ttyd-sessions-hook.sh << 'EOF'
 #!/bin/bash
+if [ "$CONTINUE_SESSION" != "1" ]; then echo '{}' >&1; exit 0; fi
 SESSION_ID=$(cat | grep -o '"session_id": *"[^"]*"' | cut -d'"' -f4)
 [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ] && exit 0
 DIR=/home/coding-agent/.kimi-ttyd-sessions

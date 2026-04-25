@@ -33,6 +33,7 @@ EOF
 # Writes Codex session_id to .codex-ttyd-sessions/${PORT:-7681} on first boot only
 cat > /home/coding-agent/.codex-ttyd-sessions-hook.sh << 'EOF'
 #!/bin/bash
+[ "$CONTINUE_SESSION" = "1" ] || exit 0
 SESSION_ID=$(cat | jq -r .session_id 2>/dev/null)
 [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ] && exit 0
 DIR=/home/coding-agent/.codex-ttyd-sessions
