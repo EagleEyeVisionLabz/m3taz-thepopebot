@@ -7,7 +7,7 @@ import { dispatchCommand, dispatchPreAuthCommand } from '../lib/channels/command
 import { getByChannelChatId, setActiveThread } from '../lib/db/user-channels.js';
 import { chat, chatStream, summarizeAgentJob } from '../lib/ai/index.js';
 import { createNotification } from '../lib/db/notifications.js';
-import { loadTriggers } from '../lib/triggers.js';
+import { getFireTriggers } from '../lib/triggers.js';
 import { verifyApiKey } from '../lib/db/api-keys.js';
 import { getConfig } from '../lib/config.js';
 import { parseOAuthState, exchangeCodeForToken } from '../lib/oauth/helper.js';
@@ -19,8 +19,6 @@ const _refreshLocks = new Map();
 // Bot token — resolved from DB/env, can be overridden by /telegram/register
 let telegramBotToken = null;
 
-// Cached trigger firing function (initialized on first request)
-let _fireTriggers = null;
 
 function getTelegramBotToken() {
   if (!telegramBotToken) {
@@ -29,13 +27,6 @@ function getTelegramBotToken() {
   return telegramBotToken;
 }
 
-function getFireTriggers() {
-  if (!_fireTriggers) {
-    const result = loadTriggers();
-    _fireTriggers = result.fireTriggers;
-  }
-  return _fireTriggers;
-}
 
 // Routes that have their own authentication
 const PUBLIC_ROUTES = ['/telegram/webhook', '/github/webhook', '/ping', '/oauth/callback'];

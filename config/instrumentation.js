@@ -52,7 +52,7 @@ export async function register() {
   }
 
   // Start cron scheduler
-  const { loadCrons } = await import('../lib/cron.js');
+  const { loadCrons, reloadCrons } = await import('../lib/cron.js');
   loadCrons();
 
   // Start built-in crons (version check)
@@ -73,6 +73,34 @@ export async function register() {
   // Start internal maintenance cron (cleanup orphaned agent job keys, etc.)
   const { startMaintenanceCron } = await import('../lib/maintenance.js');
   startMaintenanceCron();
+
+  // Watch config files for hot reload (avoids full pm2 restart on git pull)
+  const { reloadTriggers } = await import('../lib/triggers.js');
+  const { default: chokidar } = await import('chokidar');
+  const { PROJECT_ROOT } = await import('../lib/paths.js');
+  const path = await import('path');
+
+  const cronsPath = path.join(PROJECT_ROOT, 'agent-job/CRONS.json');
+  const triggersPath = path.join(PROJECT_ROOT, 'event-handler/TRIGGERS.json');
+
+  const watcher = chokidar.watch([cronsPath, triggersPath], {
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 500 },
+  });
+
+  watcher.on('change', (filePath) => {
+    if (filePath.endsWith('CRONS.json')) {
+      console.log('[config watch] CRONS.json changed, reloading...');
+      reloadCrons();
+    } else if (filePath.endsWith('TRIGGERS.json')) {
+      console.log('[config watch] TRIGGERS.json changed, reloading...');
+      reloadTriggers();
+    }
+  });
+
+  watcher.on('error', (err) => {
+    console.error('[config watch] Watcher error:', err.message);
+  });
 
   console.log('thepopebot initialized');
 }

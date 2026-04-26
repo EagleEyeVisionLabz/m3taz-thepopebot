@@ -68,11 +68,6 @@ jobs:
           docker exec thepopebot-event-handler rm -f /tmp/.rebuild-status
           echo "status=$STATUS" >> $GITHUB_OUTPUT
 
-      - name: Reload (no version change)
-        if: steps.pull.outputs.status == 'RELOAD'
-        run: |
-          docker exec thepopebot-event-handler gosu coding-agent pm2 reload all
-
       - name: Pull new image and restart container
         if: steps.pull.outputs.status == 'VERSION_CHANGED'
         run: |
