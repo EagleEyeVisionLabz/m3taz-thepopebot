@@ -87,6 +87,15 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
     textareaRef.current?.focus();
   }, []);
 
+  // Refocus textarea when streaming ends so the user can immediately type the next message
+  const wasStreaming = useRef(isStreaming);
+  useEffect(() => {
+    if (wasStreaming.current && !isStreaming) {
+      textareaRef.current?.focus();
+    }
+    wasStreaming.current = isStreaming;
+  }, [isStreaming]);
+
   // Close dropdown on outside click
   useEffect(() => {
     if (!modeDropdownOpen) return;
@@ -257,7 +266,6 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
               'placeholder:text-muted-foreground focus:outline-none',
               'min-h-[84px] md:min-h-0 max-h-[40vh] md:max-h-[200px]'
             )}
-            disabled={isStreaming}
           />
 
           <div className="flex items-center justify-between">
