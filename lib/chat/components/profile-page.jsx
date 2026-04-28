@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { PageLayout } from './page-layout.js';
 import { KeyIcon, SendIcon, CopyIcon, CheckIcon } from './icons.js';
-import { updateProfile } from '../../auth/actions.js';
+import { updateProfile, updateProfileInfo } from '../../auth/actions.js';
 import {
   issueTelegramCode,
   unlinkTelegramChannel,
@@ -56,7 +56,98 @@ export function ProfileLayout({ session, children }) {
   );
 }
 
-export function ProfileLoginPage({ session }) {
+function FormBanner({ message }) {
+  if (!message) return null;
+  return (
+    <div className={`rounded-lg border p-3 text-sm ${
+      message.type === 'error'
+        ? 'border-destructive/30 bg-destructive/5 text-destructive'
+        : 'border-green-500/30 bg-green-500/5 text-green-500'
+    }`}>
+      {message.text}
+    </div>
+  );
+}
+
+function ProfileInfoForm({ profile }) {
+  const [firstName, setFirstName] = useState(profile?.firstName || '');
+  const [lastName, setLastName] = useState(profile?.lastName || '');
+  const [nickname, setNickname] = useState(profile?.nickname || '');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMessage(null);
+    setSaving(true);
+    try {
+      const result = await updateProfileInfo({ firstName, lastName, nickname });
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        setMessage({ type: 'success', text: 'Profile saved.' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to save profile.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <h2 className="text-base font-medium">Profile</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Used by agents to address you and route DMs (e.g. &quot;send X to Steve&quot;).
+        </p>
+      </div>
+
+      <FormBanner message={message} />
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">First name</label>
+        <input
+          type="text"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Last name</label>
+        <input
+          type="text"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Nickname</label>
+        <input
+          type="text"
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          placeholder="e.g. Steve"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={saving}
+        className="rounded-md px-4 py-2 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
+      >
+        {saving ? 'Saving...' : 'Save profile'}
+      </button>
+    </form>
+  );
+}
+
+function CredentialsForm({ session }) {
   const [email, setEmail] = useState(session?.user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -89,31 +180,29 @@ export function ProfileLoginPage({ session }) {
       if (result.error) {
         setMessage({ type: 'error', text: result.error });
       } else {
-        setMessage({ type: 'success', text: 'Profile updated. Changes take effect on next sign-in.' });
+        setMessage({ type: 'success', text: 'Updated. Changes take effect on next sign-in.' });
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
       }
     } catch {
-      setMessage({ type: 'error', text: 'Failed to update profile.' });
+      setMessage({ type: 'error', text: 'Failed to update.' });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-md space-y-6">
-      {message && (
-        <div className={`rounded-lg border p-3 text-sm ${
-          message.type === 'error'
-            ? 'border-destructive/30 bg-destructive/5 text-destructive'
-            : 'border-green-500/30 bg-green-500/5 text-green-500'
-        }`}>
-          {message.text}
-        </div>
-      )}
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <h2 className="text-base font-medium">Login &amp; security</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Change your email or password. Requires your current password.
+        </p>
+      </div>
 
-      {/* Email */}
+      <FormBanner message={message} />
+
       <div className="space-y-2">
         <label className="text-sm font-medium">Email</label>
         <input
@@ -124,19 +213,17 @@ export function ProfileLoginPage({ session }) {
         />
       </div>
 
-      {/* Current Password */}
       <div className="space-y-2">
         <label className="text-sm font-medium">Current password</label>
         <input
           type="password"
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
-          placeholder="Required to save changes"
+          placeholder="Required to change email or password"
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
         />
       </div>
 
-      {/* New Password */}
       <div className="space-y-2">
         <label className="text-sm font-medium">New password</label>
         <input
@@ -148,7 +235,6 @@ export function ProfileLoginPage({ session }) {
         />
       </div>
 
-      {/* Confirm New Password */}
       {newPassword && (
         <div className="space-y-2">
           <label className="text-sm font-medium">Confirm new password</label>
@@ -169,6 +255,16 @@ export function ProfileLoginPage({ session }) {
         {saving ? 'Saving...' : 'Save changes'}
       </button>
     </form>
+  );
+}
+
+export function ProfileLoginPage({ session, profile }) {
+  return (
+    <div className="max-w-md space-y-10">
+      <ProfileInfoForm profile={profile} />
+      <div className="border-t border-border" />
+      <CredentialsForm session={session} />
+    </div>
   );
 }
 

@@ -129,7 +129,7 @@ Both use `lib/tools/docker.js` for container lifecycle via Unix socket API.
 
 ## Skills System
 
-Skills live in `skills/`. Each skill is a directory with a `SKILL.md` containing YAML frontmatter (`name`, `description`). The `{{skills}}` template variable in markdown files resolves skill descriptions at runtime. Default skills: `agent-job-secrets`, `playwright-cli`. Agent-specific bridges (`.claude/skills`, `.pi/skills`, etc.) symlink to `skills/`.
+Skills live in `skills/`. Each skill is a directory with a `SKILL.md` containing YAML frontmatter (`name`, `description`). The `{{skills}}` template variable in markdown files resolves skill descriptions at runtime. Default skills: `agent-job-secrets` (list/get secrets), `agent-job-dm` (list users + send DM via the user's default channel), `agent-job-background` (spawn/check background agent jobs), `playwright-cli`. Agent-specific bridges (`.claude/skills`, `.pi/skills`, etc.) symlink to `skills/`.
 
 ## Template Config & Markdown Includes
 

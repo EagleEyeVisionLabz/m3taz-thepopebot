@@ -40,6 +40,6 @@ export const CONFIG_TARGETS = {
 
   // GitHub variables consumed by scaffolded workflows
   AUTO_MERGE:            { variable: true, default: 'true', firstRunOnly: true },
-  ALLOWED_PATHS:         { variable: true, default: '/logs,/agents', firstRunOnly: true },
+  ALLOWED_PATHS:         { variable: true, default: '/', firstRunOnly: true },
   RUNS_ON:               { variable: true },
 };

@@ -116,8 +116,9 @@ function DefaultAgentSection({ settings, onReload }) {
           </div>
         </div>
         <div className="border-t border-border pt-3 space-y-3">
+          <p className="text-sm font-semibold">Agent Mode</p>
           <ModeDefaultRow
-            label="Agent mode branch"
+            label="Branch"
             mode="agent"
             field="branch"
             value={settings.modeDefaults?.agent?.branch || 'default'}
@@ -125,17 +126,23 @@ function DefaultAgentSection({ settings, onReload }) {
             onSaved={onReload}
           />
           <ModeDefaultRow
-            label="Agent mode git action"
+            label="Git action"
             mode="agent"
             field="gitAction"
             value={settings.modeDefaults?.agent?.gitAction || 'push'}
             options={GIT_ACTION_OPTIONS}
             onSaved={onReload}
           />
+          <ModeAutoRunRow
+            mode="agent"
+            value={!!settings.modeDefaults?.agent?.autoRun}
+            onSaved={onReload}
+          />
         </div>
         <div className="border-t border-border pt-3 space-y-3">
+          <p className="text-sm font-semibold">Code Mode</p>
           <ModeDefaultRow
-            label="Code mode branch"
+            label="Branch"
             mode="code"
             field="branch"
             value={settings.modeDefaults?.code?.branch || 'dynamic'}
@@ -143,14 +150,49 @@ function DefaultAgentSection({ settings, onReload }) {
             onSaved={onReload}
           />
           <ModeDefaultRow
-            label="Code mode git action"
+            label="Git action"
             mode="code"
             field="gitAction"
             value={settings.modeDefaults?.code?.gitAction || 'create-pr'}
             options={GIT_ACTION_OPTIONS}
             onSaved={onReload}
           />
+          <ModeAutoRunRow
+            mode="code"
+            value={!!settings.modeDefaults?.code?.autoRun}
+            onSaved={onReload}
+          />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ModeAutoRunRow({ mode, value, onSaved }) {
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleToggle = async () => {
+    setSaving(true);
+    const result = await setModeDefault(mode, 'autoRun', !value);
+    setSaving(false);
+    if (result?.success) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      await onSaved();
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <label className="text-sm font-medium">Auto-run</label>
+        <p className="text-xs text-muted-foreground">Run the git action automatically when the agent finishes.</p>
+      </div>
+      <div className="flex items-center gap-3">
+        {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
+        {saved && <span className="text-xs text-green-500 inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span>}
+        <ToggleSwitch checked={value} onChange={handleToggle} />
       </div>
     </div>
   );

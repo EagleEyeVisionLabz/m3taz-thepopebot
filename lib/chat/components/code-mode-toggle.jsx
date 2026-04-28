@@ -211,6 +211,7 @@ export function WorkspaceBar({
   onDiffStatsRefresh,
   onShowDiff,
   chatMode = 'agent',
+  autoRunInfo = null,
 }) {
   const [branches, setBranches] = useState([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
@@ -256,7 +257,7 @@ export function WorkspaceBar({
           </>
         )}
       </div>
-      {workspace?.id && <WorkspaceCommandButton workspaceId={workspace.id} diffStats={diffStats} onDiffStatsRefresh={onDiffStatsRefresh} onShowDiff={onShowDiff} chatMode={chatMode} />}
+      {workspace?.id && <WorkspaceCommandButton workspaceId={workspace.id} diffStats={diffStats} onDiffStatsRefresh={onDiffStatsRefresh} onShowDiff={onShowDiff} chatMode={chatMode} autoRunInfo={autoRunInfo} />}
     </div>
   );
 }
@@ -276,16 +277,15 @@ export function CommandOutputDialog({ title, logs, exitCode, running, onClose })
     }
   }, [logs?.length]);
 
-  // Close on Escape
+  // Close on Escape — works whether running or not.
   useEffect(() => {
-    if (running) return;
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [running, onClose]);
+  }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={running ? undefined : onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
         className="bg-background border border-border rounded-lg shadow-lg w-full max-w-xl mx-4 flex flex-col max-h-[70vh]"
         onClick={(e) => e.stopPropagation()}
@@ -294,19 +294,17 @@ export function CommandOutputDialog({ title, logs, exitCode, running, onClose })
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold">{title}</span>
-            {running && logs?.length > 0 && (
+            {running && (
               <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
             )}
           </div>
-          {!running && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-            >
-              <XIcon size={16} />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+          >
+            <XIcon size={16} />
+          </button>
         </div>
 
         {/* Body */}
@@ -324,7 +322,7 @@ export function CommandOutputDialog({ title, logs, exitCode, running, onClose })
         </div>
 
         {/* Footer */}
-        {!running && (
+        {!running && exitCode !== null && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
             <span className={cn('text-xs font-medium', exitCode === 0 ? 'text-green-500' : 'text-destructive')}>
               {exitCode === 0 ? 'Completed' : `Exited with code ${exitCode}`}
@@ -347,7 +345,7 @@ export function CommandOutputDialog({ title, logs, exitCode, running, onClose })
 const STORAGE_KEY = 'thepopebot-workspace-command';
 const FALLBACK_BY_MODE = { agent: 'push', code: 'create-pr' };
 
-function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, onShowDiff, chatMode = 'agent' }) {
+function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, onShowDiff, chatMode = 'agent', autoRunInfo = null }) {
   const storageKey = `${STORAGE_KEY}:${chatMode}`;
   const [selectedCommand, setSelectedCommandState] = useState(() => {
     try { return localStorage.getItem(storageKey) || FALLBACK_BY_MODE[chatMode] || 'create-pr'; }
@@ -372,11 +370,17 @@ function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, on
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [chatMode, storageKey]);
-  const [commandRunning, setCommandRunning] = useState(false);
+
+  // Unified run state — manual click and server auto-run share this state
+  // machine. They differ only in (a) who launches the container and
+  // (b) whether the dialog opens automatically.
+  const [running, setRunning] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [commandLogs, setCommandLogs] = useState([]);
   const [commandExitCode, setCommandExitCode] = useState(null);
+  const [activeCommand, setActiveCommand] = useState(selectedCommand);
   const esRef = useRef(null);
+  const consumedAutoRunRef = useRef(null);
 
   // Cleanup EventSource on unmount
   useEffect(() => {
@@ -385,13 +389,59 @@ function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, on
     };
   }, []);
 
-  const handleRun = useCallback(async () => {
-    if (commandRunning) return;
+  const attachLogStream = useCallback((containerName) => {
+    const es = new EventSource(`/stream/containers/logs?name=${encodeURIComponent(containerName)}&cleanup=true`);
+    esRef.current = es;
 
-    setCommandRunning(true);
+    es.addEventListener('log', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setCommandLogs((prev) => [...prev, data]);
+      } catch {}
+    });
+
+    es.addEventListener('exit', (e) => {
+      let code = -1;
+      try { code = JSON.parse(e.data).exitCode; } catch {}
+      setCommandExitCode(code);
+      setRunning(false);
+      es.close();
+      esRef.current = null;
+      onDiffStatsRefresh?.();
+      // Force-open the dialog on failure so the user sees what happened.
+      if (code !== 0) setDialogOpen(true);
+    });
+
+    es.addEventListener('error', () => {
+      es.close();
+      esRef.current = null;
+      setRunning(false);
+      setCommandExitCode((prev) => prev === null ? -1 : prev);
+    });
+  }, [onDiffStatsRefresh]);
+
+  // Server-side auto-run: container is already launched, just attach.
+  useEffect(() => {
+    if (!autoRunInfo?.containerName) return;
+    if (consumedAutoRunRef.current === autoRunInfo.id) return;
+    consumedAutoRunRef.current = autoRunInfo.id;
+    if (esRef.current) { esRef.current.close(); esRef.current = null; }
+    setRunning(true);
+    setDialogOpen(false);
+    setCommandLogs([]);
+    setCommandExitCode(null);
+    setActiveCommand(autoRunInfo.command || selectedCommand);
+    attachLogStream(autoRunInfo.containerName);
+  }, [autoRunInfo, attachLogStream, selectedCommand]);
+
+  const handleRun = useCallback(async () => {
+    if (running) return;
+
+    setRunning(true);
     setDialogOpen(true);
     setCommandLogs([]);
     setCommandExitCode(null);
+    setActiveCommand(selectedCommand);
 
     try {
       const { launchWorkspaceCommand } = await import('../../code/actions.js');
@@ -400,47 +450,21 @@ function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, on
       if (!launch.success) {
         setCommandLogs([{ stream: 'stderr', raw: launch.message || 'Failed to launch', parsed: [{ type: 'text', text: launch.message || 'Failed to launch' }] }]);
         setCommandExitCode(1);
-        setCommandRunning(false);
+        setRunning(false);
         return;
       }
 
-      // Connect to shared SSE endpoint for live streaming
-      const es = new EventSource(`/stream/containers/logs?name=${encodeURIComponent(launch.containerName)}&cleanup=true`);
-      esRef.current = es;
-
-      es.addEventListener('log', (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          setCommandLogs((prev) => [...prev, data]);
-        } catch {}
-      });
-
-      es.addEventListener('exit', (e) => {
-        try {
-          const { exitCode } = JSON.parse(e.data);
-          setCommandExitCode(exitCode);
-        } catch {
-          setCommandExitCode(-1);
-        }
-        setCommandRunning(false);
-        es.close();
-        esRef.current = null;
-        onDiffStatsRefresh?.();
-      });
-
-      es.addEventListener('error', () => {
-        es.close();
-        esRef.current = null;
-        setCommandRunning(false);
-        if (commandExitCode === null) setCommandExitCode(-1);
-      });
-
+      attachLogStream(launch.containerName);
     } catch (err) {
       setCommandLogs([{ stream: 'stderr', raw: err.message || 'Command failed', parsed: [{ type: 'text', text: err.message || 'Command failed' }] }]);
       setCommandExitCode(1);
-      setCommandRunning(false);
+      setRunning(false);
     }
-  }, [workspaceId, selectedCommand, commandRunning, diffStats, onDiffStatsRefresh]);
+  }, [workspaceId, selectedCommand, running, attachLogStream]);
+
+  const handleSpinnerClick = useCallback(() => {
+    setDialogOpen(true);
+  }, []);
 
   const handleDialogClose = useCallback(() => {
     setDialogOpen(false);
@@ -457,27 +481,31 @@ function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, on
           <span className="text-green-500">+{diffStats?.insertions ?? 0}</span>
           <span className="text-destructive">-{diffStats?.deletions ?? 0}</span>
         </button>
+        {running && (
+          <button
+            type="button"
+            onClick={handleSpinnerClick}
+            title="View logs"
+            aria-label="View logs"
+            className="h-[28px] w-[28px] flex items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            <SpinnerIcon size={12} className="animate-spin" />
+          </button>
+        )}
         <div className="flex items-center">
           <button
             type="button"
             onClick={handleRun}
-            disabled={commandRunning}
+            disabled={running}
             className="text-xs leading-4 px-2.5 h-[28px] font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors rounded-l-md disabled:opacity-50"
           >
-            {commandRunning ? (
-              <span className="flex items-center gap-1.5">
-                <SpinnerIcon size={12} className="animate-spin" />
-                Running...
-              </span>
-            ) : (
-              getCommandLabel(selectedCommand)
-            )}
+            {getCommandLabel(selectedCommand)}
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger>
               <button
                 type="button"
-                disabled={commandRunning}
+                disabled={running}
                 className="text-xs leading-4 px-1.5 h-[28px] font-medium border border-border border-l-0 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors rounded-r-md disabled:opacity-50 flex items-center"
               >
                 <ChevronDownIcon size={14} />
@@ -502,10 +530,10 @@ function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, on
 
       {dialogOpen && (
         <CommandOutputDialog
-          title={getCommandLabel(selectedCommand)}
+          title={getCommandLabel(activeCommand)}
           logs={commandLogs}
           exitCode={commandExitCode}
-          running={commandRunning}
+          running={running}
           onClose={handleDialogClose}
         />
       )}

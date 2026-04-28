@@ -129,4 +129,4 @@ Always build AND test a skill in the same job. Tell the agent to test with real 
 
 ## Default Skills
 
-Check `skills/` for available built-in skills (e.g., `agent-job-secrets`, `playwright-cli`).
+Check `skills/` for available built-in skills (e.g., `agent-job-secrets`, `agent-job-dm`, `agent-job-background`, `playwright-cli`).

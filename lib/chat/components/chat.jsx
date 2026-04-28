@@ -293,6 +293,24 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
     }
   }, [workspaceState?.id]);
 
+  // Watch for `data-auto-run` parts on assistant messages — emitted by the
+  // server when the chat finishes and a workspace command auto-launches.
+  // We hand the latest one to WorkspaceBar so the spinner attaches to the
+  // running container without opening the dialog.
+  const autoRunInfo = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== 'assistant' || !m.parts) continue;
+      for (let j = m.parts.length - 1; j >= 0; j--) {
+        const part = m.parts[j];
+        if (part?.type === 'data-auto-run' && part.data?.containerName) {
+          return { id: part.id, containerName: part.data.containerName, command: part.data.command };
+        }
+      }
+    }
+    return null;
+  }, [messages]);
+
   const handleDiffStatsRefresh = useCallback(async () => {
     if (!workspaceState?.id) return null;
     try {
@@ -447,6 +465,8 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
                       diffStats={diffStats}
                       onDiffStatsRefresh={handleDiffStatsRefresh}
                       onShowDiff={() => setShowDiff(true)}
+                      chatMode={codeMode ? 'code' : 'agent'}
+                      autoRunInfo={autoRunInfo}
                     />
                   </div>
                 )}

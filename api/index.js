@@ -4,7 +4,8 @@ import { setWebhook } from '../lib/tools/telegram.js';
 import { getAgentJobStatus, fetchAgentJobLog } from '../lib/tools/github.js';
 import { getTelegramAdapter } from '../lib/channels/index.js';
 import { dispatchCommand, dispatchPreAuthCommand } from '../lib/channels/commands/index.js';
-import { getByChannelChatId, setActiveThread } from '../lib/db/user-channels.js';
+import { getByChannelChatId, getVerifiedChannels, setActiveThread } from '../lib/db/user-channels.js';
+import { getAllUsers, getUserById } from '../lib/db/users.js';
 import { chat, chatStream, summarizeAgentJob } from '../lib/ai/index.js';
 import { createNotification } from '../lib/db/notifications.js';
 import { getFireTriggers } from '../lib/triggers.js';
@@ -159,6 +160,74 @@ async function handleGetAgentSecret(request) {
   }
   // Unknown structured value — return raw
   return Response.json({ value: raw });
+}
+
+async function handleListUsers() {
+  const users = getAllUsers();
+  const enriched = users.map((u) => {
+    const channels = getVerifiedChannels(u.id).map((c) => c.channel);
+    return {
+      id: u.id,
+      email: u.email,
+      first_name: u.firstName,
+      last_name: u.lastName,
+      nickname: u.nickname,
+      role: u.role,
+      channels,
+    };
+  });
+  return Response.json({ users: enriched });
+}
+
+async function handleSendDm(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const { user_id, message, channel } = body;
+  if (!user_id) return Response.json({ error: 'Missing user_id' }, { status: 400 });
+  if (!message || typeof message !== 'string') {
+    return Response.json({ error: 'Missing message' }, { status: 400 });
+  }
+
+  const user = getUserById(user_id);
+  if (!user) return Response.json({ error: 'User not found' }, { status: 404 });
+
+  const verified = getVerifiedChannels(user_id);
+  if (verified.length === 0) {
+    return Response.json({ error: 'User has no verified DM channels' }, { status: 409 });
+  }
+
+  // Pick channel: explicit name, or 'default' / omitted = first verified (Telegram preferred while it's the only impl).
+  const wantDefault = !channel || channel === 'default';
+  const target = wantDefault
+    ? (verified.find((c) => c.channel === 'telegram') || verified[0])
+    : verified.find((c) => c.channel === channel);
+
+  if (!target) {
+    return Response.json(
+      { error: `User has no verified ${channel} channel`, available: verified.map((c) => c.channel) },
+      { status: 409 }
+    );
+  }
+
+  if (target.channel === 'telegram') {
+    const botToken = getTelegramBotToken();
+    if (!botToken) return Response.json({ error: 'Telegram bot token not configured' }, { status: 500 });
+    const adapter = getTelegramAdapter(botToken);
+    try {
+      await adapter.sendResponse(target.channelChatId, message, { chatId: target.channelChatId });
+      return Response.json({ ok: true, channel: 'telegram', user_id });
+    } catch (err) {
+      console.error('Failed to send DM:', err);
+      return Response.json({ error: 'Failed to send DM' }, { status: 502 });
+    }
+  }
+
+  return Response.json({ error: `Channel "${target.channel}" not implemented` }, { status: 501 });
 }
 
 async function handleListAgentSecrets(request) {
@@ -429,6 +498,7 @@ async function POST(request) {
   // Route to handler
   switch (routePath) {
     case '/create-agent-job':     return handleCreateAgentJob(request);
+    case '/send-dm':              return handleSendDm(request);
     case '/telegram/webhook':   return handleTelegramWebhook(request);
     case '/telegram/register':  return handleTelegramRegister(request);
     case '/github/webhook':     return handleGithubWebhook(request);
@@ -449,6 +519,7 @@ async function GET(request) {
     case '/agent-jobs/status':  return handleAgentJobStatus(request);
     case '/get-agent-job-secret':     return handleGetAgentSecret(request);
     case '/agent-job-list-secrets':  return handleListAgentSecrets(request);
+    case '/users':              return handleListUsers();
     case '/oauth/callback':     return handleOAuthCallback(request);
     default:                    return Response.json({ error: 'Not found' }, { status: 404 });
   }

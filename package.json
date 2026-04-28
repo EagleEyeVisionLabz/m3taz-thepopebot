@@ -17,6 +17,7 @@
     "./db": "./lib/db/index.js",
     "./db/chats": "./lib/db/chats.js",
     "./db/oauth-tokens": "./lib/db/oauth-tokens.js",
+    "./db/users": "./lib/db/users.js",
     "./chat": "./lib/chat/components/index.js",
     "./chat/actions": "./lib/chat/actions.js",
     "./chat/telegram-profile": "./lib/chat/telegram-profile.js",

@@ -169,6 +169,13 @@
       "when": 1776559857722,
       "tag": "0023_needy_ender_wiggin",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1777411826512,
+      "tag": "0024_third_moondragon",
+      "breakpoints": true
     }
   ]
 }
