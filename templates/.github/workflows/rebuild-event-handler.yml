@@ -54,7 +54,7 @@ jobs:
               # Commit any template changes from init
               git -C /project add -A
               if ! git -C /project diff --cached --quiet; then
-                git -C /project commit -m "chore: apply thepopebot init after upgrade"
+                git -C /project commit -m "chore: apply thepopebot init after upgrade [skip ci]"
                 git -C /project push origin main
               fi
 

@@ -122,23 +122,25 @@ export function AppSidebar({ user }) {
               </Tooltip>
             </SidebarMenuItem>
 
-            {/* Clusters */}
-            <SidebarMenuItem>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <SidebarMenuButton
-                    href="/clusters"
-                    className={collapsed ? 'justify-center' : ''}
-                  >
-                    <ClusterIcon size={16} />
-                    {!collapsed && <span>Clusters</span>}
-                  </SidebarMenuButton>
-                </TooltipTrigger>
-                {collapsed && (
-                  <TooltipContent side="right">Clusters</TooltipContent>
-                )}
-              </Tooltip>
-            </SidebarMenuItem>
+            {/* Clusters — hidden for now */}
+            {false && (
+              <SidebarMenuItem>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SidebarMenuButton
+                      href="/clusters"
+                      className={collapsed ? 'justify-center' : ''}
+                    >
+                      <ClusterIcon size={16} />
+                      {!collapsed && <span>Clusters</span>}
+                    </SidebarMenuButton>
+                  </TooltipTrigger>
+                  {collapsed && (
+                    <TooltipContent side="right">Clusters</TooltipContent>
+                  )}
+                </Tooltip>
+              </SidebarMenuItem>
+            )}
 
             {/* Containers */}
             <SidebarMenuItem>
