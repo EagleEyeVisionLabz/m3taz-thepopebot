@@ -280,6 +280,19 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
                 <PaperclipIcon size={16} />
               </button>
 
+              {!codeMode && (
+                <button
+                  type="button"
+                  onClick={() => setSecretsOpen(true)}
+                  className="inline-flex items-center justify-center rounded-lg p-2.5 text-muted-foreground hover:text-foreground"
+                  aria-label="Manage agent job secrets"
+                  title="Manage agent job secrets"
+                  disabled={isStreaming}
+                >
+                  <KeyIcon size={16} />
+                </button>
+              )}
+
               {/* Plan/Code dropdown */}
               {codeModeSettings && (
                 <div className="relative" ref={dropdownRef}>
@@ -320,19 +333,6 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
                     </div>
                   )}
                 </div>
-              )}
-
-              {!codeMode && (
-                <button
-                  type="button"
-                  onClick={() => setSecretsOpen(true)}
-                  className="inline-flex items-center justify-center rounded-lg p-2.5 text-muted-foreground hover:text-foreground"
-                  aria-label="Manage agent job secrets"
-                  title="Manage agent job secrets"
-                  disabled={isStreaming}
-                >
-                  <KeyIcon size={16} />
-                </button>
               )}
 
               {/* Interactive toggle — left-click to launch with default agent,
