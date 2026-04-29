@@ -8,7 +8,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import '@xterm/xterm/css/xterm.css';
 import { SpinnerIcon, MicIcon } from '../chat/components/icons.js';
-import { getCommandLabel, CommandOutputDialog } from '../chat/components/code-mode-toggle.js';
+import { CommandOutputDialog } from '../chat/components/code-mode-toggle.js';
+import { GIT_COMMANDS, getCommandLabel, FALLBACK_BY_MODE } from '../git-commands.js';
 import { useVoiceInput } from '../voice/use-voice-input.js';
 import { VoiceBars } from '../chat/components/voice-bars.js';
 
@@ -543,11 +544,6 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
           color: #7aa2f7;
           background: rgba(122,162,247,0.08);
         }
-        .code-toolbar-dropup-separator {
-          height: 1px;
-          background: var(--tb-border, rgba(169,177,214,0.15));
-          margin: 4px 0;
-        }
         .code-toolbar-btn--reconnect:hover {
           color: var(--tb-hover, #a9b1d6);
         }
@@ -843,7 +839,6 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
 }
 
 const STORAGE_KEY = 'thepopebot-workspace-command';
-const FALLBACK_BY_MODE = { agent: 'push', code: 'create-pr' };
 
 function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, onShowDiff }) {
   // Resolve chatMode from the workspace's chat (matches code-mode-toggle's per-mode behavior).
@@ -967,17 +962,7 @@ function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, 
         </div>
         {dropupOpen && (
           <div className="code-toolbar-dropup">
-            {['commit', 'push', 'create-pr'].map((cmd) => (
-              <button
-                key={cmd}
-                className="code-toolbar-dropup-item"
-                onClick={() => { setSelectedCommand(cmd); setDropupOpen(false); }}
-              >
-                {getCommandLabel(cmd)}
-              </button>
-            ))}
-            <div className="code-toolbar-dropup-separator" />
-            {['pull'].map((cmd) => (
+            {GIT_COMMANDS.map((cmd) => (
               <button
                 key={cmd}
                 className="code-toolbar-dropup-item"

@@ -4,20 +4,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { GitBranchIcon, ChevronDownIcon, SpinnerIcon, XIcon, PlusIcon } from './icons.js';
 import { Combobox } from './ui/combobox.js';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from './ui/dropdown-menu.js';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu.js';
 import { cn } from '../utils.js';
 import { CodeLogView } from './code-log-view.js';
 
-/**
- * Auto-generates display labels from command slug.
- * Splits on hyphens, capitalizes each word. Words ≤2 chars are uppercased (e.g. pr → PR).
- */
-export function getCommandLabel(slug) {
-  return slug
-    .split('-')
-    .map(word => word.length <= 2 ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
+import { GIT_COMMANDS, getCommandLabel, FALLBACK_BY_MODE } from '../../git-commands.js';
+// Re-export so existing client imports (`from './code-mode-toggle.js'`) keep working.
+export { GIT_COMMANDS, getCommandLabel, FALLBACK_BY_MODE };
 
 /**
  * Repo/branch picker dropdowns for the empty state (below chat input).
@@ -343,7 +336,6 @@ export function CommandOutputDialog({ title, logs, exitCode, running, onClose })
 }
 
 const STORAGE_KEY = 'thepopebot-workspace-command';
-const FALLBACK_BY_MODE = { agent: 'push', code: 'create-pr' };
 
 function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, onShowDiff, chatMode = 'agent', autoRunInfo = null }) {
   const storageKey = `${STORAGE_KEY}:${chatMode}`;
@@ -512,13 +504,7 @@ function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, on
               </button>
             </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end" className="whitespace-nowrap">
-            {['commit', 'push', 'create-pr'].map((cmd) => (
-              <DropdownMenuItem key={cmd} onClick={() => setSelectedCommand(cmd)}>
-                {getCommandLabel(cmd)}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            {['pull'].map((cmd) => (
+            {GIT_COMMANDS.map((cmd) => (
               <DropdownMenuItem key={cmd} onClick={() => setSelectedCommand(cmd)}>
                 {getCommandLabel(cmd)}
               </DropdownMenuItem>

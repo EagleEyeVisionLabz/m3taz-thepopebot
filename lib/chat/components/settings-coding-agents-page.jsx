@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { CheckIcon } from './icons.js';
+import { GIT_COMMANDS, getCommandLabel } from './code-mode-toggle.js';
 import {
   getCodingAgentSettings,
   updateCodingAgentConfig,
@@ -203,12 +204,7 @@ const BRANCH_OPTIONS = [
   { value: 'dynamic', label: 'Feature branch' },
 ];
 
-const GIT_ACTION_OPTIONS = [
-  { value: 'commit', label: 'Commit' },
-  { value: 'push', label: 'Push' },
-  { value: 'create-pr', label: 'Create PR' },
-  { value: 'pull', label: 'Pull' },
-];
+const GIT_ACTION_OPTIONS = GIT_COMMANDS.map(value => ({ value, label: getCommandLabel(value) }));
 
 function ModeDefaultRow({ label, mode, field, value, options, onSaved }) {
   const [saving, setSaving] = useState(false);
