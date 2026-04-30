@@ -1,33 +1,55 @@
 ---
 name: agent-job-dm
-description: Use to look up the project's users and send a direct message to one of them via their default channel (currently Telegram). Trigger when the user says "send X to <name>", "DM <name>", "message <name>", "tell <name> that…", or asks "who are the users?", "list users", "who can I message?". Returns user id, email, first/last name, nickname, and available DM channels.
+description: Send a direct message to a user OR broadcast to all subscribed admins via their default channel (currently Telegram). Also looks up users when a specific person is named. Trigger when the user says "let me know when…", "DM me", "send X to <name>", "tell <name> that…", "notify the admins", "alert everyone", "broadcast this", "let the team know", "tell all admins", or asks "who are the users?", "list users".
 ---
 
-## Usage
+## The three modes — pick one
+
+Read the request and route to **exactly one** of these. Do NOT mix them.
+
+### Mode 1 — Broadcast to admins
+
+Trigger phrases: "notify the admins", "alert everyone", "broadcast this", "let the team know", "tell all admins", "send to admins".
+
+```bash
+node skills/agent-job-dm/agent-job-dm.js send "<message>" --broadcast
+```
+
+**DO NOT** run `list` first. **DO NOT** look up any user ids. The `--broadcast` flag handles fan-out internally — it sends to every admin where `subscribed_to_system_messages=true` automatically. Calling `list` and then sending one-at-a-time is wrong and skips the subscription filter.
+
+### Mode 2 — DM the originator (the user who started this job)
+
+Trigger phrases: "DM me", "let me know when…", "tell me when…", "ping me", "send me".
+
+```bash
+node skills/agent-job-dm/agent-job-dm.js send "<message>"
+```
+
+No flags. The skill reads `USER_ID` from the environment (the originator) and sends to them. **Don't** look them up — `USER_ID` is already correct.
+
+### Mode 3 — DM a specific named user
+
+Trigger phrases: "tell Alice…", "send this to bob@…", "DM <name>", "message <person>".
+
+```bash
+node skills/agent-job-dm/agent-job-dm.js list
+node skills/agent-job-dm/agent-job-dm.js send --user-id <id> "<message>"
+```
+
+1. Run `list` to get the directory.
+2. Match the requested name against `nickname`, `first_name`, `last_name`, or `email`. If multiple match, ask which one.
+3. Send with `--user-id <id>`.
+
+## Other commands
 
 ```bash
 # List users (id, email, first/last name, nickname, role, available DM channels)
 node skills/agent-job-dm/agent-job-dm.js list
-
-# Send a DM to a user via their default channel (currently Telegram)
-node skills/agent-job-dm/agent-job-dm.js send <user_id> "Hello from the agent"
-
-# Force a specific channel
-node skills/agent-job-dm/agent-job-dm.js send <user_id> "Hi" --channel telegram
 ```
 
-## Sending DMs to a user
+## Rules
 
-When the user asks to "message", "DM", or "send X to <name>":
-
-1. Run `list` to get the directory.
-2. Match the requested name against `nickname`, `first_name`, `last_name`, or `email` — pick the user the request most likely refers to. If multiple match, ask for disambiguation.
-3. Make sure the target user has at least one entry in `channels` (e.g. `["telegram"]`) — if not, tell the requester the user has no DM channel linked.
-4. Call `send <user_id> "<message>"` (omit `--channel` to use the default — currently Telegram).
-
-The `<message>` arg is sent verbatim. Pass it through unchanged unless the requester asked you to rewrite it.
-
-## Notes
-
-- `AGENT_JOB_TOKEN` and `APP_URL` are injected automatically — no setup required.
-- Users link their DM channel themselves in `/profile/telegram`. If `channels` is empty for a user, they cannot be DM'd.
+- The `<message>` arg is sent verbatim. Don't rewrite it unless the requester asked you to.
+- `AGENT_JOB_TOKEN`, `APP_URL`, and `USER_ID` are injected automatically — no setup required.
+- Every DM is stored in the recipient's inbox in the event handler, regardless of delivery channel.
+- Users link their DM channel themselves in `/profile/telegram`. If a target user has no verified channel, the message still lands in their inbox.

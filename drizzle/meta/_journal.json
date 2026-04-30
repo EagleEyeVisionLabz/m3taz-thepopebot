@@ -176,6 +176,13 @@
       "when": 1777411826512,
       "tag": "0024_third_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1777509249758,
+      "tag": "0025_common_psylocke",
+      "breakpoints": true
     }
   ]
 }

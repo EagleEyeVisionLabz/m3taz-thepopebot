@@ -7,7 +7,7 @@ import { dispatchCommand, dispatchPreAuthCommand } from '../lib/channels/command
 import { getByChannelChatId, getVerifiedChannels, setActiveThread } from '../lib/db/user-channels.js';
 import { getAllUsers, getUserById } from '../lib/db/users.js';
 import { chat, chatStream, summarizeAgentJob } from '../lib/ai/index.js';
-import { createNotification } from '../lib/db/notifications.js';
+import { createSystemMessage, getSubscribedAdminIds, markDelivered } from '../lib/db/messages.js';
 import { getFireTriggers } from '../lib/triggers.js';
 import { verifyApiKey } from '../lib/db/api-keys.js';
 import { getConfig } from '../lib/config.js';
@@ -94,6 +94,7 @@ async function handleCreateAgentJob(request) {
       llmModel: body.llm_model,
       agentBackend: body.agent_backend,
       scope: body.scope,
+      userId: body.user_id,
     });
     return Response.json(result);
   } catch (err) {
@@ -179,6 +180,48 @@ async function handleListUsers() {
   return Response.json({ users: enriched });
 }
 
+/**
+ * Push a stored message to the recipient's default channel.
+ * On success: stamp `deliveredAt`. On failure: log; row stays undelivered.
+ * Best-effort, async — caller does not await.
+ */
+async function pushToDefaultChannel(row) {
+  try {
+    const verified = getVerifiedChannels(row.userId);
+    if (verified.length === 0) return; // No channel — row remains in inbox only
+    const target = verified[0]; // Ordered by verifiedAt ASC; first verified is default
+
+    if (target.channel === 'telegram') {
+      const botToken = getTelegramBotToken();
+      if (!botToken) {
+        console.error(`[pushToDefaultChannel] Telegram token not configured for user ${row.userId}`);
+        return;
+      }
+      const adapter = getTelegramAdapter(botToken);
+      await adapter.sendResponse(target.channelChatId, row.content, { chatId: target.channelChatId });
+      markDelivered(row.id);
+    }
+  } catch (err) {
+    console.error(`[pushToDefaultChannel] failed for user ${row.userId}:`, err.message);
+  }
+}
+
+/**
+ * Dispatch a system message: store + deliver.
+ *  - userId set → 1 row to that user, pushed to their default channel.
+ *  - userId absent → fan-out: 1 row per admin where subscribedToSystemMessages=1, each pushed.
+ * Returns the count of rows written.
+ */
+function dispatchSystemMessage({ userId, content, payload }) {
+  const recipients = userId ? [userId] : getSubscribedAdminIds();
+  const rows = recipients.map((uid) => createSystemMessage(uid, content, payload));
+  // Fire-and-forget delivery; deliveredAt updated per row when each push lands.
+  for (const row of rows) {
+    pushToDefaultChannel(row);
+  }
+  return rows.length;
+}
+
 async function handleSendDm(request) {
   let body;
   try {
@@ -187,47 +230,18 @@ async function handleSendDm(request) {
     return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { user_id, message, channel } = body;
-  if (!user_id) return Response.json({ error: 'Missing user_id' }, { status: 400 });
+  const { user_id, message, payload } = body;
   if (!message || typeof message !== 'string') {
     return Response.json({ error: 'Missing message' }, { status: 400 });
   }
 
-  const user = getUserById(user_id);
-  if (!user) return Response.json({ error: 'User not found' }, { status: 404 });
-
-  const verified = getVerifiedChannels(user_id);
-  if (verified.length === 0) {
-    return Response.json({ error: 'User has no verified DM channels' }, { status: 409 });
+  if (user_id) {
+    const user = getUserById(user_id);
+    if (!user) return Response.json({ error: 'User not found' }, { status: 404 });
   }
 
-  // Pick channel: explicit name, or 'default' / omitted = first verified (Telegram preferred while it's the only impl).
-  const wantDefault = !channel || channel === 'default';
-  const target = wantDefault
-    ? (verified.find((c) => c.channel === 'telegram') || verified[0])
-    : verified.find((c) => c.channel === channel);
-
-  if (!target) {
-    return Response.json(
-      { error: `User has no verified ${channel} channel`, available: verified.map((c) => c.channel) },
-      { status: 409 }
-    );
-  }
-
-  if (target.channel === 'telegram') {
-    const botToken = getTelegramBotToken();
-    if (!botToken) return Response.json({ error: 'Telegram bot token not configured' }, { status: 500 });
-    const adapter = getTelegramAdapter(botToken);
-    try {
-      await adapter.sendResponse(target.channelChatId, message, { chatId: target.channelChatId });
-      return Response.json({ ok: true, channel: 'telegram', user_id });
-    } catch (err) {
-      console.error('Failed to send DM:', err);
-      return Response.json({ error: 'Failed to send DM' }, { status: 502 });
-    }
-  }
-
-  return Response.json({ error: `Channel "${target.channel}" not implemented` }, { status: 501 });
+  const count = dispatchSystemMessage({ userId: user_id || null, content: message, payload });
+  return Response.json({ ok: true, recipients: count });
 }
 
 async function handleListAgentSecrets(request) {
@@ -369,11 +383,16 @@ async function handleGithubWebhook(request) {
     };
 
     const message = await summarizeAgentJob(results);
-    await createNotification(message, payload);
+    const recipientUserId = payload.user_id || null;
+    const count = dispatchSystemMessage({
+      userId: recipientUserId,
+      content: message,
+      payload,
+    });
 
-    console.log(`Notification saved for agent-job ${agentJobId.slice(0, 8)}`);
+    console.log(`Notified ${count} recipient(s) for agent-job ${agentJobId.slice(0, 8)}${recipientUserId ? ` (user ${recipientUserId.slice(0, 8)})` : ' (broadcast)'}`);
 
-    return Response.json({ ok: true, notified: true });
+    return Response.json({ ok: true, notified: true, recipients: count });
   } catch (err) {
     console.error('Failed to process GitHub webhook:', err);
     return Response.json({ error: 'Failed to process webhook' }, { status: 500 });

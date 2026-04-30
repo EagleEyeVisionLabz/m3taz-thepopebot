@@ -2,6 +2,7 @@
 
 const apiKey = process.env.AGENT_JOB_TOKEN;
 const appUrl = process.env.APP_URL;
+const defaultUserId = process.env.USER_ID || null;
 
 const args = process.argv.slice(2);
 const [subcommand, ...rest] = args;
@@ -9,7 +10,9 @@ const [subcommand, ...rest] = args;
 function usage() {
   console.error('Usage:');
   console.error('  agent-job-dm list');
-  console.error('  agent-job-dm send <user_id> <message> [--channel telegram|default]');
+  console.error('  agent-job-dm send <message>                      # to the originating user (USER_ID)');
+  console.error('  agent-job-dm send --user-id <id> <message>       # to a specific user');
+  console.error('  agent-job-dm send <message> --broadcast          # to all subscribed admins');
   process.exit(1);
 }
 
@@ -44,22 +47,31 @@ if (subcommand === 'list') {
 }
 
 if (subcommand === 'send') {
-  let userId = null;
+  let userId = undefined;
+  let broadcast = false;
   let message = null;
-  let channel = null;
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
-    if (arg === '--channel') channel = rest[++i];
-    else if (userId === null) userId = arg;
+    if (arg === '--user-id') userId = rest[++i];
+    else if (arg === '--broadcast') broadcast = true;
     else if (message === null) message = arg;
     else { console.error(`Unexpected arg: ${arg}`); usage(); }
   }
-  if (!userId || !message) {
-    console.error('Usage: agent-job-dm send <user_id> <message> [--channel telegram|default]');
-    process.exit(1);
+  if (!message) {
+    console.error('Missing message.');
+    usage();
   }
-  const body = { user_id: userId, message };
-  if (channel) body.channel = channel;
+  // Recipient resolution: explicit --user-id wins. Otherwise --broadcast routes to subscribed admins.
+  // Default: the originating user (USER_ID env), set when this job was created.
+  const body = { message };
+  if (userId !== undefined) body.user_id = userId;
+  else if (!broadcast) {
+    if (!defaultUserId) {
+      console.error('No USER_ID in env and no --user-id/--broadcast specified. Either pass --user-id <id> or --broadcast.');
+      process.exit(1);
+    }
+    body.user_id = defaultUserId;
+  }
   const json = await httpJson('POST', '/api/send-dm', body);
   console.log(JSON.stringify(json, null, 2));
   process.exit(0);

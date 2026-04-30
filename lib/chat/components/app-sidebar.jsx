@@ -29,13 +29,13 @@ export function AppSidebar({ user }) {
   const [changelog, setChangelog] = useState(null);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
-  // Fetch badge counts (notifications + PRs) — run immediately, then every 10 minutes
+  // Fetch badge counts (unread messages + PRs) — run immediately, then every 10 minutes
   useEffect(() => {
     function fetchCounts() {
       fetch('/chats/counts')
         .then(r => r.json())
-        .then(({ notifications, pullRequests }) => {
-          setUnreadCount(notifications || 0);
+        .then(({ messages, pullRequests }) => {
+          setUnreadCount(messages || 0);
           setPrCount(pullRequests || 0);
         })
         .catch(() => {});
@@ -192,18 +192,18 @@ export function AppSidebar({ user }) {
               </Tooltip>
             </SidebarMenuItem>
 
-            {/* Notifications */}
+            {/* Messages */}
             <SidebarMenuItem>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <SidebarMenuButton
-                    href="/notifications"
+                    href="/messages"
                     className={collapsed ? 'justify-center' : ''}
                   >
                     <BellIcon size={16} />
                     {!collapsed && (
                       <span className="flex items-center gap-2">
-                        Notifications
+                        Messages
                         {unreadCount > 0 && (
                           <span className="inline-flex items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium leading-none text-destructive-foreground">
                             {unreadCount}
@@ -219,13 +219,13 @@ export function AppSidebar({ user }) {
                   </SidebarMenuButton>
                 </TooltipTrigger>
                 {collapsed && (
-                  <TooltipContent side="right">Notifications</TooltipContent>
+                  <TooltipContent side="right">Messages</TooltipContent>
                 )}
               </Tooltip>
             </SidebarMenuItem>
 
-            {/* Upgrade (only when update is available) */}
-            {updateAvailable && (
+            {/* Upgrade (admin-only — triggerUpgrade requires admin) */}
+            {updateAvailable && user?.role === 'admin' && (
               <SidebarMenuItem>
                 <Tooltip>
                   <TooltipTrigger asChild>
