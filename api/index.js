@@ -1,6 +1,5 @@
 import { createHash, timingSafeEqual, randomUUID } from 'crypto';
 import { createAgentJob } from '../lib/tools/create-agent-job.js';
-import { setWebhook } from '../lib/tools/telegram.js';
 import { getAgentJobStatus, fetchAgentJobLog } from '../lib/tools/github.js';
 import { getTelegramAdapter } from '../lib/channels/index.js';
 import { dispatchCommand, dispatchPreAuthCommand } from '../lib/channels/commands/index.js';
@@ -17,7 +16,7 @@ import { setAgentJobSecret } from '../lib/db/config.js';
 // ── Per-key lock for OAuth token refresh ────────────────────────────
 const _refreshLocks = new Map();
 
-// Bot token — resolved from DB/env, can be overridden by /telegram/register
+// Bot token — resolved from DB/env
 let telegramBotToken = null;
 
 
@@ -251,23 +250,6 @@ async function handleListAgentSecrets(request) {
   }
   const { listAgentJobSecrets } = await import('../lib/db/config.js');
   return Response.json({ secrets: listAgentJobSecrets() });
-}
-
-async function handleTelegramRegister(request) {
-  const body = await request.json();
-  const { bot_token, webhook_url } = body;
-  if (!bot_token || !webhook_url) {
-    return Response.json({ error: 'Missing bot_token or webhook_url' }, { status: 400 });
-  }
-
-  try {
-    const result = await setWebhook(bot_token, webhook_url, getConfig('TELEGRAM_WEBHOOK_SECRET'));
-    telegramBotToken = bot_token;
-    return Response.json({ success: true, result });
-  } catch (err) {
-    console.error(err);
-    return Response.json({ error: 'Failed to register webhook' }, { status: 500 });
-  }
 }
 
 async function handleTelegramWebhook(request) {
@@ -519,7 +501,6 @@ async function POST(request) {
     case '/create-agent-job':     return handleCreateAgentJob(request);
     case '/send-dm':              return handleSendDm(request);
     case '/telegram/webhook':   return handleTelegramWebhook(request);
-    case '/telegram/register':  return handleTelegramRegister(request);
     case '/github/webhook':     return handleGithubWebhook(request);
     default:                    return Response.json({ error: 'Not found' }, { status: 404 });
   }

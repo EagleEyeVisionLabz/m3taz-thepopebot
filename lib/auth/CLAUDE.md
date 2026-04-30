@@ -26,6 +26,19 @@ When `AUTH_SECRET` rotates or the container restarts, old session JWTs can't be 
 
 **No implicit login**: After setup, the user is redirected to `/login?created=1` and must authenticate normally. This ensures proper JWT session establishment.
 
+## Role Model + requireAuth / requireAdmin
+
+The `users.role` column defaults to `'user'`. Only `createFirstUser()` writes `'admin'` — every subsequent `addUser()` / `createUser()` row is a regular user unless explicitly promoted via the admin UI. The role lives in the JWT and is surfaced as `session.user.role`.
+
+`lib/auth/index.js` exports two helpers (regular functions, not `'use server'`):
+
+- `requireAuth()` — any logged-in user; throws redirect to `/login` otherwise.
+- `requireAdmin()` — requires `role === 'admin'`; throws redirect to `/forbidden` otherwise.
+
+Mutation server actions in `lib/chat/actions.js` use `requireAdmin()` for settings/config writes (LLM keys, coding-agent config, telegram, voice, webhooks, agent secrets, etc.) and `requireAuth()` for chat/workspace CRUD on user-owned rows. Reads stay open to any logged-in user. The Upgrade sidebar item is gated on `user.role === 'admin'`.
+
+JWT role staleness on demotion is a known limitation — a demoted user keeps `'admin'` in their token until next sign-in.
+
 ## getPageAuthState()
 
 Combines `auth()` + `getUserCount()` in a single `Promise.all()` call. Returns `{ session, needsSetup }`. The login page uses `needsSetup` to show either `<SetupForm>` or `<LoginForm>`.

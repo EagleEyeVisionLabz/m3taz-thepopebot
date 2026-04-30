@@ -4,26 +4,29 @@ JSX components for the chat UI. Compiled to `.js` by `npm run build` (esbuild).
 
 ## Admin Navigation
 
-Admin pages live under `/admin/` with two top-level sections:
+Top-level admin tabs (`settings-layout.jsx`), in order: **General → Event Handler → Crons → Triggers → Users → GitHub**. Most-used settings up front; GitHub (rarely touched once configured) is last.
 
-- **`/admin/event-handler/`** — Event handler config with pill-style sub-tabs via `SubTabLayout` (`settings-secrets-layout.jsx`):
-  - `/admin/event-handler/llms` — LLM provider credentials
-  - `/admin/event-handler/coding-agents` — Multi-agent config (5 backends)
-  - `/admin/event-handler/helper-llm` — Helper LLM settings (provider/model used for chat titles, agent-job titles + summaries)
-  - `/admin/event-handler/jobs` — Agent job custom secrets
-  - `/admin/event-handler/telegram` — Telegram integration
-  - `/admin/event-handler/voice` — Voice input (AssemblyAI)
-  - `/admin/event-handler/webhooks` — Webhook secret
-- **Other admin pages**: `/admin/api-keys`, `/admin/github`, `/admin/users`, `/admin/crons`, `/admin/triggers`, `/admin/general`
+Sub-tabs under `/admin/event-handler/` (pill-style nav via `SubTabLayout` in `settings-secrets-layout.jsx`):
+- `/admin/event-handler/coding-agents` — Multi-agent config (default coding agent + per-agent enable/auth/provider/model). Section heading: "Coding Agent"; the dropdown row label is "Default Coding Agent".
+- `/admin/event-handler/helper-llm` — Helper LLM (provider/model used for chat titles, agent-job titles + summaries)
+- `/admin/event-handler/llms` — LLM provider credentials + custom OpenAI-compatible providers
+- `/admin/event-handler/agent-secrets` — Custom env vars/secrets injected into agent containers (not `/jobs` — that path is gone)
+- `/admin/event-handler/telegram` — Bot token + webhook register
+- `/admin/event-handler/voice` — Voice input (AssemblyAI)
+- `/admin/event-handler/webhooks` — Webhook secret
+
+The **Clusters** sidebar entry is hidden behind `{false && ...}` for now — markup intact for fast re-enable.
 
 ## Key Component Pages
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `CodingAgentsPage` | `settings-coding-agents-page.jsx` | Multi-agent config — 5 agent cards with enable/disable, auth mode, model selection |
-| `JobsPage` | `settings-jobs-page.jsx` | Custom env vars for agent job containers |
-| `ContainersPage` | `containers-page.jsx` | Live Docker container monitoring via SSE (`/stream/containers`) |
+| `CodingAgentsPage` | `settings-coding-agents-page.jsx` | Multi-agent config — 6 agent cards (claude-code, pi, codex-cli, gemini-cli, opencode, kimi-cli) with enable/disable, auth mode, model selection. Also holds Default Coding Agent + per-mode Branch/Git action/Auto-run defaults. |
+| `JobsPage` / `JobSecretsManager` | `settings-jobs-page.jsx` | Custom env vars for agent job containers. `JobSecretsManager` is also reused as a popup from the agent-mode chat input (KeyIcon left of the Plan/Code dropdown) via `Dialog` with `maxWidth="max-w-2xl"` and `showHeader={false}`. |
+| `MessagesPage` | `messages-page.jsx` | Per-user inbox (Inbox/All tabs, click-to-mark-read, bulk mark-all, no delete). Replaces the old global `notifications-page.jsx`. |
+| `ContainersPage` | `containers-page.jsx` | Live Docker container monitoring via SSE (`/stream/containers`) plus a per-row logs button (FileTextIcon) that opens `/stream/containers/logs?name=...` |
 | `ChatsPage` | `chats-page.jsx` | Full chat history with search, bulk actions |
+| `ProfilePage` | `profile-page.jsx` | Two forms: **Profile** (firstName/lastName/nickname, no password gate) and **Login & security** (email/password, current password required) |
 
 ## Tool Display Names
 

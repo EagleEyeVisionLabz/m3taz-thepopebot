@@ -53,6 +53,11 @@ interactive/7_start-interactive.sh → source agents/${AGENT}/interactive.sh (ag
 | `command/push` | Agent stages, commits, and pushes the branch to origin |
 | `command/create-pr` | Agent ensures changes are committed and pushed, then creates/updates a PR |
 | `command/pull` | Agent fetches from origin, rebases onto base branch, resolves any conflicts |
+| `command/pull-push` | Combined: agent commits any local changes, fetches, rebases onto the same-name remote branch (resolving conflicts), then pushes |
+
+The exact prompt strings used to invoke these from the host live in `lib/git-commands.js` (`getCommandPrompt`) — single source of truth across chat dropdown, workspace toolbar, admin defaults, manual launch, and auto-run.
+
+Per-run command containers are uniquely named (`command-<cmd>-<shortId>-<rand8>`) so repeated invocations don't collide. The matching SSE log endpoint (`/stream/containers/logs?name=...&cleanup=true`) removes the container on every terminal path so one-shot containers don't accumulate.
 
 ## Adding a New Coding Agent
 
@@ -380,8 +385,9 @@ When `SCOPE` is set (e.g. `SCOPE=agents/triage`), the entrypoint scripts adjust:
 | `PROMPT` | Task prompt passed to agent |
 | `SYSTEM_PROMPT` | Optional system prompt (fallback — prefer `/home/coding-agent/SYSTEM.md` file on volume). Each agent handles differently (see setup.sh). |
 | `PERMISSION` | `plan` or `code` (default: `code`). Controls permission/approval mode for agents that support it. |
-| `CONTINUE_SESSION` | `1` = resume previous session. Requires volume mount at `/home/coding-agent`. |
+| `CONTINUE_SESSION` | `1` = resume previous session. Requires volume mount at `/home/coding-agent`. **Also gates session-id capture**: when not `1`, every agent's session-tracking hook/plugin short-circuits so a one-shot command container (commit/push/create-pr/pull/pull-push) sharing a workspace with a live chat doesn't overwrite the chat's session file. |
 | `LLM_MODEL` | Model override |
+| `USER_ID` | Originator user id. Set on every container that carries `AGENT_JOB_TOKEN` (interactive, headless, agent-job, SDK adapter via the host). Used by the `agent-job-dm` and `agent-job-background` skills as the default `--user-id` so spawned jobs / DMs attribute correctly without explicit flags. |
 
 ### Interactive Runtime
 

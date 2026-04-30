@@ -22,16 +22,27 @@ Key files: `schema.js` (source of truth), `drizzle/` (generated migrations), `dr
 
 | Table | Purpose |
 |-------|---------|
-| `users` | Admin accounts (email, bcrypt password hash, role) |
+| `users` | User accounts (email, bcrypt password hash, role, first_name/last_name/nickname, subscribed_to_system_messages). `role` defaults to `'user'`; only `createFirstUser()` writes `'admin'`. |
 | `chats` | Chat sessions (user_id, title, starred, chat_mode, code_workspace_id, timestamps) |
-| `messages` | Chat messages (chat_id, role, content) |
+| `messages` | Unified per-user inbox + chat history. `chat_id` nullable (system DMs have none); `user_id` NOT NULL; `payload`, `read`, `delivered_at` columns. Index `messages_inbox_lookup` on `(user_id, read, created_at)` drives the inbox query. |
 | `code_workspaces` | Code workspace containers (user_id, container_name, repo, branch, feature_branch, title, last_interactive_commit, coding_agent, scope, starred, has_changes) |
-| `notifications` | Job completion notifications (notification text, payload, read status) |
-| `subscriptions` | Channel subscriptions (platform, channel_id) |
-| `user_channels` | Per-user channel linking (user_id, channel, channel_chat_id, code, code_expires_at, verified_at, active_thread_id) — Telegram verification + active thread |
+| `user_channels` | Per-user channel linking (user_id, channel, channel_chat_id, code, code_expires_at, verified_at, active_thread_id) — Telegram verification + active thread. `getVerifiedChannels()` orders by `verified_at ASC`; the first verified row is the user's default channel. |
 | `clusters` | Worker clusters (user_id, name, system_prompt, folders, enabled, starred) |
 | `cluster_roles` | Role definitions scoped to a cluster (cluster_id, role_name, role, trigger_config, max_concurrency, plan_mode, cleanup_worker_dir, folders) |
-| `settings` | Key-value configuration store (also stores API keys and OAuth tokens via type/key/value) |
+| `settings` | Key-value configuration store (also stores API keys, OAuth tokens, custom LLM providers, and agent job secrets via type/key/value) |
+
+The legacy `notifications` and `subscriptions` tables were dropped in migration 0025. System DMs (job completion, etc.) are now rows in the `messages` table with `chat_id = NULL`.
+
+## System Messages (`lib/db/messages.js`)
+
+Per-user inbox API:
+
+- `createSystemMessage(userId, content, payload)` — write a row with `chat_id = NULL`, `read = 0`, returns the row.
+- `getSubscribedAdminIds()` — admin user_ids where `subscribed_to_system_messages = 1`. Used for broadcast fan-out when no `user_id` is supplied to `/api/send-dm` or the GitHub PR-merge webhook.
+- `markDelivered(id)` — stamp `delivered_at` after the channel push lands.
+- `getMessagesForUser(userId, {scope})`, `getUnreadCountForUser(userId)`, `markMessageRead(userId, id)`, `markAllReadForUser(userId)` — UI inbox helpers.
+
+`saveMessage(chatId, userId, role, content)` in `lib/db/chats.js` is the chat-history writer; it requires `userId` and logs+throws on missing rows.
 
 ## OAuth Token Storage
 

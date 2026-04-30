@@ -41,22 +41,29 @@ Files in managed directories are auto-synced (created, updated, **and deleted**)
 /
 ├── api/                        # GET/POST handlers for all /api/* routes
 ├── lib/
-│   ├── actions.js              # Shared action executor (agent, command, webhook)
-│   ├── cron.js                 # Cron scheduler (loads CRONS.json)
-│   ├── triggers.js             # Webhook trigger middleware (loads TRIGGERS.json)
+│   ├── actions.js              # Shared action executor (agent, command, webhook) — threads scope/agent_backend/llm_model/user_id
+│   ├── cron.js                 # Cron scheduler (loads CRONS.json) + reloadCrons() for hot-reload
+│   ├── triggers.js             # Webhook trigger middleware (loads TRIGGERS.json) + reloadTriggers()
 │   ├── paths.js                # Exports PROJECT_ROOT (process.cwd())
+│   ├── git-commands.js         # Single source of truth for workspace git commands (pull/commit/push/pull-push/create-pr) + prompts
 │   ├── ai/                     # LLM integration (chat stream, SDK adapters, helper LLM, session manager, scope, system prompt)
-│   ├── auth/                   # NextAuth config, helpers, middleware, server actions, components
-│   ├── channels/               # Channel adapters (base class, Telegram, factory)
+│   ├── auth/                   # NextAuth config, requireAuth/requireAdmin helpers, middleware, server actions, components
+│   ├── channels/               # Channel adapters (base class, Telegram, factory) + slash commands
 │   ├── chat/                   # Chat route handler, server actions, React UI components
 │   ├── cluster/                # Worker clusters (roles, triggers, Docker containers)
 │   ├── code/                   # Code workspaces (server actions, terminal view, WebSocket proxy)
-│   ├── containers/             # Container SSE streaming (Docker container status)
-│   ├── db/                     # SQLite via Drizzle (schema, migrations, api-keys)
+│   ├── containers/             # Container SSE streaming (status + log tail)
+│   ├── db/                     # SQLite via Drizzle (schema, migrations, api-keys, messages, oauth-tokens, user-channels)
 │   ├── tools/                  # Job creation, GitHub API, Telegram, Docker, AssemblyAI
 │   ├── voice/                  # Voice input (AssemblyAI streaming transcription)
+│   ├── oauth/                  # OAuth state encryption (helper.js) + provider presets (providers.js)
+│   ├── github-api.js           # Low-level GitHub REST helper used by tools/github.js + setup
+│   ├── llm-providers.js        # BUILTIN_PROVIDERS table (slug → baseUrl, defaults, anthropicEndpoint)
+│   ├── maintenance.js          # Hourly cleanup cron (expired agent-job API keys, etc.)
+│   ├── config.js               # getConfig/setConfig + CONFIG_KEYS allowlist + DEFAULTS
 │   └── utils/
-│       └── render-md.js        # Markdown {{include}} processor
+│       ├── render-md.js        # Markdown {{include}} processor
+│       └── random-name.js      # Random container name generator
 ├── config/
 │   ├── index.js                # withThepopebot() Next.js config wrapper
 │   └── instrumentation.js      # Server startup hook (loads .env, starts crons)
@@ -129,7 +136,7 @@ Both use `lib/tools/docker.js` for container lifecycle via Unix socket API.
 
 ## Skills System
 
-Skills live in `skills/`. Each skill is a directory with a `SKILL.md` containing YAML frontmatter (`name`, `description`). The `{{skills}}` template variable in markdown files resolves skill descriptions at runtime. Default skills: `agent-job-secrets` (list/get secrets), `agent-job-dm` (list users + send DM via the user's default channel), `agent-job-background` (spawn/check background agent jobs), `playwright-cli`. Agent-specific bridges (`.claude/skills`, `.pi/skills`, etc.) symlink to `skills/`.
+Skills live in `skills/`. Each skill is a directory with a `SKILL.md` containing YAML frontmatter (`name`, `description`). The `{{skills}}` template variable in markdown files resolves skill descriptions at runtime. Default skills: `agent-job-secrets` (list/get secrets), `agent-job-dm` (list users + send a DM/broadcast via the recipient's default channel), `agent-job-background` (spawn/check background agent jobs — defaults `--user-id` to the running container's `USER_ID` env so spawned jobs inherit the originator), `playwright-cli`. Agent-specific bridges (`.claude/skills`, `.pi/skills`, etc.) symlink to `skills/`.
 
 ## Template Config & Markdown Includes
 
@@ -139,6 +146,6 @@ Config markdown files support `{{ filepath.md }}` includes (resolved relative to
 
 Runtime config lives in the **settings DB** (`lib/db/settings`), not `.env`. The event handler reads via `getConfig(key)` and writes via the admin UI or `setup/lib/sync.mjs` during initial setup. `.env` only carries bootstrap values that must exist before the DB is available (e.g. `AUTH_SECRET`, `DATABASE_PATH`).
 
-**Agent-job containers** are launched locally by the event handler (`runAgentJobContainer` in `lib/tools/docker.js`). Their env vars are built at launch time from settings DB values via `buildAgentAuthEnv()` plus per-job parameters (`LLM_MODEL`, `SCOPE`, `AGENT_JOB_TOKEN`, `APP_URL`, etc.). Agent jobs do **not** consume GitHub repository variables at runtime.
+**Agent-job containers** are launched locally by the event handler (`runAgentJobContainer` in `lib/tools/docker.js`). Their env vars are built at launch time from settings DB values via `buildAgentAuthEnv()` plus per-job parameters (`LLM_MODEL`, `SCOPE`, `USER_ID`, `AGENT_JOB_TOKEN`, `APP_URL`, etc.). `USER_ID` is also set on every other container that carries `AGENT_JOB_TOKEN` (interactive, headless, SDK adapter), so skills like `agent-job-dm` and `agent-job-background` resolve the originator consistently across chat and agent-job modes. Agent jobs do **not** consume GitHub repository variables at runtime.
 
 `setup/lib/sync.mjs` may still write certain values to GitHub repo variables/secrets (for CI workflows like the npm publish pipeline), but those are separate from the runtime config path used by chat and agent jobs.

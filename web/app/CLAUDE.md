@@ -10,12 +10,13 @@ Pages, layouts, and route handlers for the event handler's browser UI. Baked int
 | `layout.js` | Root layout |
 | `globals.css`, `icon.svg` | Tailwind globals + favicon |
 | `login/`, `forbidden/` | Auth boundary pages |
-| `chat/`, `chats/` | Chat detail (`/chat/[chatId]`) and chat list endpoints |
-| `code/` | Code workspace pages and fetch routes — `[codeWorkspaceId]/`, `branches/`, `default-branch/`, `default-repo/`, `repositories/`, `workspace-branch/`, `workspace-diff/` |
-| `cluster/`, `clusters/` | Cluster detail + list (see `lib/cluster/CLAUDE.md`) |
+| `chat/`, `chats/` | Chat detail (`/chat/[chatId]`), chat list (`/chats/list`), badge counts (`/chats/counts`), scopes, voice token, finalize-chat |
+| `code/` | Code workspace pages and fetch routes — `[codeWorkspaceId]/`, `branches/`, `default-branch/`, `default-repo/`, `repositories/`, `repositories/create/`, `workspace-branch/`, `workspace-diff/` |
+| `cluster/`, `clusters/` | Cluster detail + list (see `lib/cluster/CLAUDE.md`). Hidden from sidebar nav for now. |
 | `containers/`, `crons/`, `triggers/` | Read-only admin views |
-| `notifications/`, `pull-requests/` | User dashboards |
-| `profile/` | Per-user pages: `profile/login/` (password change), `profile/telegram/` (per-user Telegram linking, see `lib/channels/CLAUDE.md`) |
+| `messages/` | Per-user inbox (renamed from `notifications/`). Backed by the unified `messages` table with `chat_id = NULL` for system DMs. |
+| `pull-requests/` | User dashboard |
+| `profile/` | Per-user pages: `profile/login/` (password change), `profile/telegram/` (per-user Telegram linking, see `lib/channels/CLAUDE.md`). The profile page itself splits into a Profile form (firstName/lastName/nickname, no password gate) and a Login & security form (email/password, current password required). |
 | `admin/` | Admin pages — see below |
 | `api/[...thepopebot]/` | Catch-all for external `/api/*` routes (re-exports from `thepopebot/api`, see `api/CLAUDE.md`) |
 | `stream/` | SSE endpoints — see below |
@@ -34,17 +35,19 @@ For the full fetch-route catalog (data endpoints by URL), see `lib/chat/CLAUDE.m
 
 ## Admin Sub-Tree (`web/app/admin/`)
 
-Top-level admin pages: `api-keys/`, `app-version/`, `chat/`, `crons/`, `general/`, `github/`, `triggers/`, `users/`, plus `event-handler/`.
+Top-level admin pages, in tab order (`settings-layout.jsx`): **General → Event Handler → Crons → Triggers → Users → GitHub**. Plus utility pages not in the tab bar: `api-keys/`, `app-version/`, `chat/`.
 
 `event-handler/` is itself tabbed (pill-style nav per `lib/chat/components/CLAUDE.md`):
 
-- `coding-agents/` — per-agent enable, auth mode, provider, model
+- `coding-agents/` — per-agent enable, auth mode, provider, model + Default Coding Agent + per-mode Branch/Git action/Auto-run defaults
 - `helper-llm/` — helper LLM config (auto-titles, summaries)
 - `llms/` — LLM provider keys + custom providers
-- `agent-secrets/` — agent-job secret env vars
-- `telegram/` — bot token + webhook
+- `agent-secrets/` — agent-job secret env vars (the old `/admin/event-handler/jobs` path is gone)
+- `telegram/` — bot token + webhook register
 - `voice/` — AssemblyAI key
 - `webhooks/` — webhook secrets
+
+The old `/admin/github/secrets/` page has been removed; the only real secret it managed (`GH_WEBHOOK_SECRET`) is accessed elsewhere.
 
 ## Auth Boundary
 

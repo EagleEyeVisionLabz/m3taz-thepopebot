@@ -38,6 +38,8 @@ Per-agent script structure (auth, setup, run, interactive, start-coding-session,
 
 The event-handler Dockerfile is multi-stage: Stages 1+2 stay on `node:22-bookworm-slim` (lean throwaway environments for `npm install` + `next build`); Stage 3 (the deployed runtime) extends `thepopebot-base`. node_modules and `.next` are built on bookworm and copied into the Ubuntu runtime stage — better-sqlite3 / sharp prebuilds are glibc-forward-compatible so this works.
 
+Stage 3 also installs the same agent runtime extras the coding-agent base provides (jq, procps, locales, fonts, Chromium dependencies, playwright-cli + Chromium under `/opt/pw-browsers`, default `cli.config.json` at `/etc/playwright/`). The in-process Claude SDK in event-handler shells out to these tools, so without the parity install the chat-mode agent hits "command not found" for tools its system prompt advertises.
+
 ## Docker Compose
 
 `docker-compose.yml` runs: Traefik (reverse proxy), event-handler. Agent-job containers are NOT in compose — created on-demand by the event handler via Docker API.

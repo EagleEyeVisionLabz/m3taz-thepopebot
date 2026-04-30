@@ -28,7 +28,7 @@ Abstract interface for platform integrations. Methods:
 
 - **Authorization**: per-user via the `user_channels` table. Unverified chats only accept `/verify <code>`; all other messages are dropped. See `lib/db/user-channels.js` and `lib/channels/commands/verify.js`.
 - **Webhook auth**: Validates `x-telegram-bot-api-secret-token` header against `TELEGRAM_WEBHOOK_SECRET`.
-- **Streaming**: `supportsStreaming` returns `false` — text + tool calls accumulate during streaming and are sent as complete messages once the turn ends. Progressive tool-call rendering (commit 740c734 / d9bf19a) inserts intermediate "→ used X" lines as tool calls land.
+- **Streaming**: `supportsStreaming` returns `false` — text + tool calls accumulate during streaming and are sent as complete messages once the turn ends. Progressive tool-call rendering inserts intermediate "→ used X" lines as tool calls land.
 
 ## Slash Commands (`lib/channels/commands/`)
 

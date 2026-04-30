@@ -24,5 +24,6 @@ export { register } from 'thepopebot/instrumentation';
 8. **`startBuiltinCrons()`** — `lib/cron.js`. Starts internal crons (e.g., npm version check). Then warms the in-memory update flag from `lib/db/update-check.js`.
 9. **`startClusterRuntime()`** — `lib/cluster/runtime.js`. Registers cluster role triggers (cron + file watch + webhook).
 10. **`startMaintenanceCron()`** — `lib/maintenance.js`. Hourly cleanup of expired agent-job API keys and other housekeeping.
+11. **Config file watchers** — chokidar watches `agent-job/CRONS.json` and `event-handler/TRIGGERS.json` (with `awaitWriteFinish`). Changes call `reloadCrons()` / `reloadTriggers()` in place — no PM2 restart needed after a `git pull` updates the configs. Invalid JSON is logged and ignored; the previous schedule keeps running.
 
 `initialized` is module-scoped so the sequence runs exactly once even if `register()` is called more than once.

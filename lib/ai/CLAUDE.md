@@ -37,8 +37,11 @@ The "job" sub-mode is no longer wired — a skill will replace autonomous job di
 - `{ type: 'tool-call', toolCallId, toolName, args }`
 - `{ type: 'tool-result', toolCallId, result }`
 - `{ type: 'error', message }` — surfaced to the UI as a red message and persisted for refresh
+- `{ type: 'auto-run', command }` — emitted at stream end when the active mode's `*_AUTO_RUN` flag is on, the workspace has uncommitted changes, and the configured git command (`pull`/`commit`/`push`/`pull-push`/`create-pr`) launched in a workspace command container. `lib/chat/api.js` surfaces it as a `data-auto-run` UI part; the chat page forwards it to WorkspaceBar so the spinner attaches without opening the dialog.
 - `{ type: 'meta', ... }`, `{ type: 'result', ... }` — internal, not emitted to client
 - `{ type: 'thinking-start' | 'thinking' | 'thinking-end' }` — SDK path only
+
+`chatStream()` requires `options.userId` and throws if missing — there are no `'unknown'` / `'telegram'` fallbacks anywhere in chat creation. Both paths set `USER_ID` on the spawned container so skills resolve the originator consistently.
 
 ## Workspace Setup
 

@@ -22,17 +22,19 @@ export { getRepositoriesHandler as GET } from 'thepopebot/chat/api';
 - `POST /stream/chat` — AI SDK streaming via `createUIMessageStream`. Handles file attachments (images/PDFs as visual, text files inlined), workspace context, and code mode settings.
 
 **Data fetch routes** (colocated with pages):
-- `/code/repositories`, `/code/branches`, `/code/default-repo` — GitHub repo/branch listing
+- `/code/repositories` (GET), `/code/repositories/create` (POST) — list / create GitHub repos
+- `/code/branches`, `/code/default-branch`, `/code/default-repo` — GitHub branch listing + defaults
 - `/code/workspace-branch` (POST) — update workspace branch
 - `/code/workspace-diff/[workspaceId]` — diff stats
 - `/code/workspace-diff/[workspaceId]/full` — full unified diff
-- `/chats` — chat list with workspace join
-- `/chats/counts` — notification + PR badge counts
+- `/chats/list` — chat list with workspace join
+- `/chats/counts` — sidebar badge counts (`messages`, `pull_requests`, etc.) — `messages` is per-user unread count from the `messages` table
 - `/chat/[chatId]/data` — chat + workspace data
 - `/chat/[chatId]/messages` — chat message history
-- `/code/[workspaceId]/chat-data` — chat data by workspace
+- `/code/[codeWorkspaceId]/chat-data` — chat data + chatMode by workspace (used by terminal-view + code-mode-toggle to pick per-mode storage keys)
 - `/chat/voice-token` — AssemblyAI temporary token
-- `/admin/app-version` — version + update check
+- `/chat/scopes` — list of available agent scopes
+- `/admin/app-version` (GET/POST) — current version + update check
 - `/chat/finalize-chat` (POST) — auto-title after first message
 
 ## Chat Streaming Flow
@@ -40,14 +42,16 @@ export { getRepositoriesHandler as GET } from 'thepopebot/chat/api';
 1. Client sends message via AI SDK `DefaultChatTransport` → `POST /stream/chat`
 2. Handler validates session, extracts text + file attachments from message parts. Images and PDFs pass through as vision content; text files are inlined into the prompt.
 3. Calls `chatStream()` from `lib/ai/` which handles DB persistence and LLM invocation. Two paths: SDK adapter (in-process, e.g. Claude Agent SDK) or direct headless container (other agents).
-4. Streams response chunks (text deltas, tool calls, tool results, thinking blocks) via `createUIMessageStream`. Tool call/tool result pairs and `{ type: 'error' }` chunks are persisted as JSON message parts.
-5. After the first user message streams, the client calls `/chat/finalize-chat` to generate the auto-title (helper LLM with truncated-description fallback).
+4. Streams response chunks (text deltas, tool calls, tool results, thinking blocks, errors) via `createUIMessageStream`. Tool call/tool result pairs and `{ type: 'error' }` chunks are persisted as JSON message parts.
+5. After the stream ends successfully, if the active mode's `*_AUTO_RUN` flag is on and the workspace has uncommitted changes, `chatStream()` launches the configured workspace command (`pull`/`commit`/`push`/`pull-push`/`create-pr`) in a fresh container and yields a final `{ type: 'auto-run', command }` chunk. `api.js` writes it as a `data-auto-run` part; `chat.jsx` forwards it to WorkspaceBar so the spinner attaches.
+6. After the first user message streams, the client calls `/chat/finalize-chat` to generate the auto-title (helper LLM with truncated-description fallback).
 
 ## Server Actions (actions.js)
 
-Used for mutations that don't need streaming responses. Key groups:
+Used for mutations that don't need streaming responses. Settings/config writes go through `requireAdmin()`; chat/workspace CRUD uses `requireAuth()` plus user-id ownership checks. Key groups:
 
 - **Chat CRUD**: `renameChat()`, `deleteChat()`, `starChat()`
 - **Coding agents**: `getCodingAgentSettings()`, `updateCodingAgentConfig()`, `setCodingAgentDefault()`
+- **Mode defaults**: `getModeBranchDefault()`, `getModeGitActionDefault()`, `setModeDefault()` — branch/git-action/auto-run defaults per chat mode (agent vs code). `setModeDefault()` validates against `GIT_COMMAND_SET` from `lib/git-commands.js`.
 - **Agent job secrets**: `getAgentJobSecrets()`, `updateAgentJobSecret()`, `deleteAgentJobSecretAction()`
 - **Container management**: `getRunnersStatus()`, `stopDockerContainer()`, `startDockerContainer()`, `removeDockerContainer()`

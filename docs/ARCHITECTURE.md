@@ -99,7 +99,6 @@ The Event Handler is a Next.js API route handler that provides orchestration cap
 | `/api/ping` | GET | N | Health check, returns `{"message": "Pong!"}` |
 | `/api/create-agent-job` | POST | Y | Create an autonomous agent job |
 | `/api/telegram/webhook` | POST | N | Telegram bot webhook (uses its own secret) |
-| `/api/telegram/register` | POST | Y | Register Telegram webhook URL |
 | `/api/github/webhook` | POST | N | Receives notifications from GitHub Actions (uses its own secret) |
 | `/api/agent-jobs/status` | GET | Y | Check status of running agent jobs |
 | `/api/cluster/:id/role/:id/webhook` | POST | Y | Trigger cluster role execution |
@@ -122,18 +121,6 @@ Check agent job status:
 ```bash
 curl "https://your-app-url/api/agent-jobs/status?agent_job_id=abc123" \
   -H "x-api-key: YOUR_API_KEY"
-```
-
-Register Telegram webhook:
-
-```bash
-curl -X POST https://your-app-url/api/telegram/register \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: YOUR_API_KEY" \
-  -d '{
-    "bot_token": "YOUR_BOT_TOKEN",
-    "webhook_url": "https://your-domain.com/api/telegram/webhook"
-  }'
 ```
 
 ### Components

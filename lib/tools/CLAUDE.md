@@ -25,11 +25,15 @@ OAuth tokens use LRU rotation via `getNextOAuthToken()` (in `lib/db/oauth-tokens
 
 ## create-agent-job.js — Agent Job Creation
 
-**Structured output for titles**: Uses `model.withStructuredOutput(z.object({ title }))` to force JSON output and avoid thinking-token leaks with extended-thinking models. Two-tier fallback: LLM → truncated description → first non-empty line with markdown heading syntax stripped.
+**Signature**: `createAgentJob(description, { llmModel?, agentBackend?, scope?, userId? })`. All optional fields land in `agent-job.config.json` as `llm_model` / `agent_backend` / `scope` / `user_id`. `runAgentJobContainer()` reads them back at launch time and threads them into env vars.
+
+**Structured output for titles**: Uses `callHelperLlmStructured({schema: z.object({title})})` to force JSON output and avoid thinking-token leaks with extended-thinking models. Two-tier fallback: LLM → truncated description → first non-empty line with markdown heading syntax stripped.
+
+**Scope SYSTEM.md pre-render**: When `scope` is set, `createAgentJob` itself resolves the scope's `SYSTEM.md` via `buildCodingAgentSystemPrompt()` (with `{{skills}}` / `{{include}}` template resolution) and stores the rendered text under `system_prompt` in `agent-job.config.json`. Named volumes can't render host-side, so the container reads the pre-rendered prompt from the config file. Both callers (cron/trigger via `lib/actions.js` and HTTP via `api/index.js`) just forward `scope` — they do not pre-render.
 
 **Git tree construction**: Uses GitHub's Git Data API (not REST content API) to create commits. Builds a tree with `base_tree` to preserve existing files, adding only `logs/{agentJobId}/agent-job.config.json`. This file is the single source of truth for job metadata.
 
-**Local Docker launch**: After pushing the `agent-job/*` branch, launches a Docker container locally (fire-and-forget). Uses a named volume for workspace, cleaned up after container exits.
+**Local Docker launch**: After pushing the `agent-job/*` branch, launches a Docker container locally (fire-and-forget). Uses a named volume for workspace, cleaned up after container exits. `runAgentJobContainer()` sets `USER_ID` from the config when present so the running agent can attribute spawned child jobs / DMs back to the originator.
 
 ## github.js — GitHub API & PAT Probing
 

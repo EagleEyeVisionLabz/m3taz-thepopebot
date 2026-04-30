@@ -25,7 +25,7 @@ All actions use `requireAuth()` with ownership checks: `getCodeWorkspaces()`, `c
 
 ## Multi-Agent Backends
 
-Code workspaces support multiple coding agent backends. Selection is **per-workspace** via the `codingAgent` column on `code_workspaces`, falling back to the global `CODING_AGENT` config key, then to `claude-code`. See `lib/code/actions.js:410`: `const agent = workspace.codingAgent || getConfig('CODING_AGENT') || 'claude-code';`. The same fallback chain is used by `lib/ai/index.js` for chat-mode streaming.
+Code workspaces support multiple coding agent backends. Selection is **per-workspace** via the `codingAgent` column on `code_workspaces`, falling back to the global `CODING_AGENT` config key, then to `claude-code`. The same fallback chain is used by `lib/ai/index.js` for chat-mode streaming.
 
 **Supported agents**: `claude-code`, `pi-coding-agent`, `gemini-cli`, `codex-cli`, `opencode`, `kimi-cli`. Each uses a different Docker image variant (`docker/coding-agent/Dockerfile.*`) and agent-specific setup/auth scripts in `docker/coding-agent/scripts/`.
 
@@ -33,10 +33,20 @@ Code workspaces support multiple coding agent backends. Selection is **per-works
 
 **Container streaming**: `lib/containers/stream.js` provides an SSE endpoint (`/stream/containers`) that polls Docker for container stats every 3 seconds. Used by the Containers admin page for live monitoring.
 
+**USER_ID env**: Interactive containers receive `USER_ID` (originator user id) so skills like `agent-job-dm` and `agent-job-background` resolve attribution without explicit flags.
+
 **Backend API in messages**: When an agent produces output, the `backendApi` field in message chunks identifies which agent backend generated the response.
+
+## Workspace Commands & Auto-Run
+
+`launchWorkspaceCommand(id, command)` and `runWorkspaceCommand(id, command)` (deprecated) spin up an ephemeral `command/<cmd>` runtime container against the workspace volume. Supported commands: `commit`, `push`, `create-pr`, `pull`, `pull-push`. Prompts are sourced from `lib/git-commands.js` (`getCommandPrompt`) — single source of truth shared with the chat dropdown, the workspace toolbar dropup, the admin defaults select, and `maybeAutoRun()` in `lib/ai/index.js`.
+
+Per-run container names are uniquely suffixed (`command-<cmd>-<shortId>-<rand8>`) so repeated invocations don't collide. The matching SSE log endpoint (`/stream/containers/logs?name=...&cleanup=true`) removes the container on every terminal path.
+
+The interactive workspace toolbar's git command button (`terminal-view.jsx`) reads the workspace's `chatMode` from `/code/{id}/chat-data` and uses a per-mode `localStorage` key (`thepopebot-workspace-command:agent` / `:code`) plus a per-mode `FALLBACK_BY_MODE` (`agent`→`pull-push`, `code`→`create-pr`) so agent-mode workspaces don't inherit code-mode defaults.
 
 ## Session Continuity
 
-Code workspaces, chat-mode (SDK adapter), and headless agent jobs share session continuity through `lib/ai/session-manager.js`. Session IDs are written to per-port files inside the workspace volume — `~/.{agent}-ttyd-sessions/${PORT}` (or scope-prefixed when `SCOPE` is set). The agent CLI captures its session ID via per-agent hooks (see `docker/coding-agent/CLAUDE.md` § Session Tracking for the 5 patterns). On the next launch the entrypoint reads the saved ID and passes the agent's resume flag (`--continue`, `--resume`, `--session`, depending on agent).
+Code workspaces, chat-mode (SDK adapter), and headless agent jobs share session continuity through `lib/ai/session-manager.js`. Session IDs are written to per-port files inside the workspace volume — `~/.{agent}-ttyd-sessions/${PORT}` (or scope-prefixed when `SCOPE` is set). The agent CLI captures its session ID via per-agent hooks (see `docker/coding-agent/CLAUDE.md` § Session Tracking for the 5 patterns). Capture is gated on `CONTINUE_SESSION=1` so one-shot command containers (commit/push/create-pr/pull/pull-push) sharing a workspace with a live chat don't overwrite the chat's session file. On the next launch the entrypoint reads the saved ID and passes the agent's resume flag (`--continue`, `--resume`, `--session`, depending on agent).
 
 Headless `run.sh` always reads from port `7681` — so SDK chat, manual chat tools, and code workspaces all converge on the same conversation when they share a workspace.
