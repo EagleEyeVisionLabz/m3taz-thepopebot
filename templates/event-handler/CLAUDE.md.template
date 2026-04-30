@@ -49,7 +49,7 @@ Three types — `agent`, `command`, `webhook`:
 #### Optional fields on `agent` actions
 
 - **`"scope"`** *(recommended)* — e.g. `"agents/triage"`. Routes the action to a **scoped agent** under `agents/<name>/`. Its `SYSTEM.md`, skills directory, and working directory all switch to that subdirectory. Scoping is technically optional (an action without `scope` runs from the repo root using the default `agent-job/SYSTEM.md`), but in practice you almost always want a scoped agent so each trigger has a clearly-defined identity, prompt, and skill set. See `agents/CLAUDE.md` for the full pattern.
-- **`"user_id"`** *(optional, usually omitted)* — identifies the user the spawned job is running as. Most triggers are unowned system handlers and have no `user_id`. Set it when the trigger is conceptually one user's — e.g., a per-user webhook integration. Find user ids in Admin > Users. As a downstream effect of attribution, the completion message routes to that user's inbox; without `user_id`, the completion broadcasts to every admin subscribed to system messages.
+- **`"user_id"`** *(optional)* — sets the owner of the agent-job. Used by internal systems like `send-dm` to route the completion message; with no owner, the message goes to all admins. Set for per-user integrations; leave out for shared/system triggers. Find user ids in Admin > Users.
 - `"agent_backend"` (e.g. `"claude-code"`, `"codex-cli"`, `"gemini-cli"`, `"pi"`, `"opencode"`, `"kimi-cli"`) — pick which coding agent runs the action, overriding the default set in Admin > Event Handler > Coding Agents.
 - `"llm_model"` — override the model used within the selected coding agent (provider is implicit in the agent).
 
