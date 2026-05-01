@@ -99,4 +99,4 @@ These commands set individual GitHub repository secrets/variables using the `gh`
 |---------|-------------|
 | `set-var KEY [VALUE]` | Set a GitHub repository variable |
 
-Agent job secrets are managed at Admin > Event Handler > Agent Jobs, stored encrypted in SQLite, and injected directly into Docker containers.
+Agent job secrets are managed at Admin > Event Handler > Agent Secrets (`/admin/event-handler/agent-secrets`), stored encrypted in SQLite, and injected directly into Docker containers.

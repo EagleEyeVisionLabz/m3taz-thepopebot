@@ -62,9 +62,10 @@ Voice/audio messages are fully resolved by the adapter — transcribed to text a
 ### Reference Implementation
 
 `lib/channels/telegram.js` (`TelegramAdapter`) is the reference implementation. It handles:
-- Webhook secret validation
-- Chat ID authorization
-- Text, voice/audio (Whisper transcription), photo, and document messages
+- Webhook secret validation (`x-telegram-bot-api-secret-token` header)
+- **Per-user verified routing** via the `user_channels` table — unverified chats only accept `/verify <code>`; everything else is silently dropped
+- Slash commands (`/verify`, `/session`, `/session list`, `/session <id>`)
+- Text, voice/audio (AssemblyAI transcription), photo, and document messages
 - Thumbs-up reaction on receipt, typing indicator during processing
 
 ---

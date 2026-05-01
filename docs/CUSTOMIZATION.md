@@ -58,12 +58,12 @@ The bot uses your LLM to understand requests and can:
 
 #### Voice Messages
 
-Send voice notes to your bot and they'll be transcribed using OpenAI Whisper.
+Send voice notes to your bot and they'll be transcribed using AssemblyAI.
 
 **Requirements:**
-- `OPENAI_API_KEY` — configure at Admin > Event Handler > LLMs
+- `ASSEMBLYAI_API_KEY` — configure at Admin > Event Handler > Voice
 
-The bot automatically detects voice messages and transcribes them before processing.
+The bot automatically detects voice messages and transcribes them before processing. The voice button in the web chat input uses the same key for real-time transcription.
 
 ### Webhooks
 
@@ -126,8 +126,12 @@ These ship with the package:
 
 | Skill | Description |
 |-------|-------------|
-| `agent-job-secrets` | List and retrieve agent secrets |
+| `agent-job-secrets` | List and retrieve agent-job secrets (OAuth credentials auto-refresh) |
+| `agent-job-dm` | List users + send a DM (or broadcast) via the recipient's default channel |
+| `agent-job-background` | Spawn a new agent job in the background and check its status |
 | `playwright-cli` | Browser automation via Playwright CLI |
+
+The `agent-job-dm` and `agent-job-background` skills both default `--user-id` to the running container's `USER_ID` env var, so chat-spawned jobs naturally attribute back to the originator (their completion DM lands in the right inbox).
 
 To add a custom skill, create a directory in `skills/` with a `SKILL.md`. To remove, delete the directory.
 

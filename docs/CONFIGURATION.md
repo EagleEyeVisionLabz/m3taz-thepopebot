@@ -14,17 +14,19 @@ Configuration is database-backed. Most settings are stored in SQLite (encrypted 
 
 | Path | What it configures |
 |------|--------------------|
-| `/admin/event-handler/llms` | LLM provider API keys + custom providers |
-| `/admin/event-handler/chat` | Active chat LLM provider, model, max tokens |
-| `/admin/event-handler/coding-agents` | Coding agent backends (5 agents), auth, models |
-| `/admin/event-handler/agent-jobs` | Custom env vars for agent containers |
-| `/admin/event-handler/webhooks` | API keys for `/api` endpoint auth |
-| `/admin/event-handler/telegram` | Bot token, webhook secret, chat ID |
+| `/admin/event-handler/coding-agents` | 6 coding agent backends — default agent, per-agent enable / auth / provider / model, plus per-mode Branch / Git action / Auto-run defaults |
+| `/admin/event-handler/helper-llm` | Helper LLM (auto-titles, agent-job titles, PR-merge summaries) |
+| `/admin/event-handler/llms` | LLM provider API keys + custom OpenAI-compatible providers |
+| `/admin/event-handler/agent-secrets` | Agent-job custom secrets (encrypted in SQLite, injected as env vars into agent containers) |
+| `/admin/event-handler/telegram` | Bot token, webhook secret, register webhook (per-user chat verification lives at `/profile/telegram`) |
 | `/admin/event-handler/voice` | AssemblyAI API key |
-| `/admin/github/tokens` | GitHub PAT, webhook secret |
-| `/admin/github/secrets` | GitHub repository secrets |
+| `/admin/event-handler/webhooks` | Webhook secrets |
+| `/admin/api-keys` | API keys for `/api/*` endpoint auth |
+| `/admin/crons` | Read-only listing of `agent-job/CRONS.json` |
+| `/admin/triggers` | Read-only listing of `event-handler/TRIGGERS.json` |
+| `/admin/github/tokens` | GitHub PAT |
 | `/admin/github/variables` | GitHub repository variables |
-| `/admin/users` | User accounts |
+| `/admin/users` | User accounts (role + subscribedToSystemMessages) |
 | `/admin/general` | Auto-upgrade, beta channel, email updates |
 
 ---
@@ -49,9 +51,11 @@ These must be set in `.env` because they are needed before the database is avail
 
 ## DB-Backed Secrets
 
-Stored encrypted (AES-256-GCM) in SQLite, managed via the admin UI:
+Stored encrypted (AES-256-GCM, key derived from `AUTH_SECRET`) in SQLite, managed via the admin UI:
 
-`GH_TOKEN`, `GH_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `MISTRAL_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `ASSEMBLYAI_API_KEY`
+`GH_TOKEN`, `GH_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `MISTRAL_API_KEY`, `XAI_API_KEY`, `KIMI_API_KEY` / `MOONSHOT_API_KEY`, `OPENROUTER_API_KEY`, `NVIDIA_API_KEY`, `CUSTOM_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CODEX_OAUTH_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `ASSEMBLYAI_API_KEY`.
+
+OAuth tokens (`CLAUDE_CODE_OAUTH_TOKEN`, `CODEX_OAUTH_TOKEN`) support multi-token LRU rotation — add multiple tokens at the same key and the event handler picks the least-recently-used on each container launch. Custom OpenAI-compatible providers (added via Admin > Event Handler > LLMs) store their own `baseUrl` + `apiKey` as a `llm_provider` row in `settings`. Agent-job custom secrets are `agent_job_secret` rows.
 
 ---
 
@@ -59,7 +63,7 @@ Stored encrypted (AES-256-GCM) in SQLite, managed via the admin UI:
 
 Stored as plaintext in SQLite, managed via the admin UI:
 
-`LLM_PROVIDER` (default: `anthropic`), `LLM_MODEL` (auto from provider), `LLM_MAX_TOKENS` (default: `4096`), `AGENT_BACKEND`, `CUSTOM_OPENAI_BASE_URL`, `UPGRADE_INCLUDE_BETA` (default: `false`), `CODING_AGENT` (default: `claude-code`), plus `CODING_AGENT_*` keys for the 5 agent backends.
+`LLM_PROVIDER` (default: `anthropic`), `LLM_MODEL` (auto from provider), `LLM_MAX_TOKENS` (default: `4096`), `AGENT_BACKEND`, `CUSTOM_OPENAI_BASE_URL`, `UPGRADE_INCLUDE_BETA` (default: `false`), `CODING_AGENT` (default: `claude-code`), plus `CODING_AGENT_*` keys for the 6 agent backends.
 
 ---
 
@@ -83,26 +87,23 @@ Manage your PAT at Admin > GitHub > Tokens.
 
 ## Agent Job Secrets
 
-Managed at Admin > Event Handler > Agent Jobs. Stored encrypted in SQLite, injected as env vars into Docker containers at runtime. Supports manual text entry or OAuth flow. The agent can discover available secrets via the `get-secret` skill.
+Managed at Admin > Event Handler > Agent Secrets (`/admin/event-handler/agent-secrets`). Stored encrypted in SQLite, injected as env vars into agent containers at runtime. Supports manual text entry or an OAuth flow (the running agent can also call the `agent-job-secrets` skill from inside a container; OAuth credentials auto-refresh under a per-key lock and rotated refresh tokens are persisted back).
 
 ---
 
 ## GitHub Repository Variables
 
-Set via `npx thepopebot set-var` or at Admin > GitHub > Variables:
+Set via `npx thepopebot set-var` or at Admin > GitHub > Variables. The list is intentionally minimal — the runtime config (LLM provider/model, coding agent, secrets) lives in the SQLite `settings` table, not here. GitHub variables are only read by the bundled CI workflows.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `APP_URL` | Public URL for the event handler | -- |
-| `AUTO_MERGE` | Set to `false` to disable auto-merge of job PRs | Enabled |
+| `AUTO_MERGE` | Set to `false` to disable auto-merge of job PRs | enabled |
 | `ALLOWED_PATHS` | Comma-separated path prefixes for auto-merge | `/logs` |
-| `AGENT_JOB_IMAGE_URL` | Docker image for agent job container | `stephengpope/thepopebot:coding-agent-claude-code-${THEPOPEBOT_VERSION}` |
 | `EVENT_HANDLER_IMAGE_URL` | Docker image for event handler | `stephengpope/thepopebot:event-handler-${THEPOPEBOT_VERSION}` |
-| `RUNS_ON` | GitHub Actions runner label (e.g., `self-hosted`) | `ubuntu-latest` |
-| `LLM_PROVIDER` | LLM provider for agent jobs | `anthropic` |
-| `LLM_MODEL` | LLM model for agent jobs | Provider default |
-| `CUSTOM_OPENAI_BASE_URL` | Custom OpenAI-compatible base URL | -- |
-| `AGENT_BACKEND` | Agent runner (e.g., `claude-code`, `pi`) | `claude-code` |
+| `RUNS_ON` | GitHub Actions runner label (workflows that need it use `self-hosted`) | `ubuntu-latest` |
+
+`LLM_PROVIDER`, `LLM_MODEL`, `CUSTOM_OPENAI_BASE_URL`, and `AGENT_BACKEND` used to mirror to GitHub variables but were removed in 1.2.76 — agent-job containers run locally and read all runtime config straight from the DB, so the GitHub mirrors had no consumers. Coding-agent images are selected per-agent at container launch (`coding-agent-{agent}-${THEPOPEBOT_VERSION}`); there is no longer a single `AGENT_JOB_IMAGE_URL` variable.
 
 ---
 

@@ -2,17 +2,18 @@
 
 Coding agents are the AI backends that power code workspaces and agent jobs. They run inside Docker containers and interact with your Git repository — writing code, running commands, creating PRs.
 
-thepopebot supports 5 coding agent backends. Each has its own Docker image and authentication method. You enable and configure them in Admin > Event Handler > Coding Agents.
+thepopebot supports 6 coding agent backends. Each has its own Docker image and authentication method. You enable and configure them in Admin > Event Handler > Coding Agents.
 
 ## Supported Backends
 
 | Backend | Config key | What it is | Auth modes |
 |---------|-----------|------------|------------|
 | Claude Code | `claude-code` (default) | Anthropic's official CLI agent | OAuth token or API key |
-| Pi | `pi` | Third-party agent by @mariozechner | API key (any provider) |
+| Pi | `pi-coding-agent` | Third-party agent by @mariozechner | API key (any provider) |
 | Gemini CLI | `gemini-cli` | Google's CLI agent | API key (Google) |
 | Codex CLI | `codex-cli` | OpenAI's CLI agent | OAuth token or API key |
 | OpenCode | `opencode` | Open-source agent | API key (any provider) |
+| Kimi CLI | `kimi-cli` | Moonshot's Kimi CLI agent | API key (any provider) |
 
 ## Configuration
 
@@ -58,6 +59,12 @@ Config keys follow the pattern `CODING_AGENT_{BACKEND}_{SETTING}`:
 - `CODING_AGENT_OPENCODE_PROVIDER` — LLM provider for OpenCode
 - `CODING_AGENT_OPENCODE_MODEL` — model override
 
+### Kimi CLI
+
+- `CODING_AGENT_KIMI_CLI_ENABLED` (default: `false`)
+- `CODING_AGENT_KIMI_CLI_PROVIDER` — LLM provider for Kimi
+- `CODING_AGENT_KIMI_CLI_MODEL` — model override
+
 ## OAuth Tokens
 
 Claude Code and Codex CLI support OAuth authentication (subscription-based, not pay-per-token).
@@ -93,11 +100,13 @@ Agent containers receive credentials automatically based on their configured aut
 
 Each backend has its own Docker image built on a shared base:
 
-- `stephengpope/thepopebot:coding-agent-base-{version}`
+- `stephengpope/thepopebot:thepopebot-base-{version}` (shared toolchain — Ubuntu 24.04 + Node 22 + Chromium + playwright)
+- `stephengpope/thepopebot:coding-agent-base-{version}` (extends `thepopebot-base` with tmux, ttyd, scripts, entrypoint)
 - `stephengpope/thepopebot:coding-agent-claude-code-{version}`
 - `stephengpope/thepopebot:coding-agent-pi-coding-agent-{version}`
 - `stephengpope/thepopebot:coding-agent-gemini-cli-{version}`
 - `stephengpope/thepopebot:coding-agent-codex-cli-{version}`
 - `stephengpope/thepopebot:coding-agent-opencode-{version}`
+- `stephengpope/thepopebot:coding-agent-kimi-cli-{version}`
 
-All images include Node.js 22, Git, GitHub CLI, and Playwright + Chromium.
+All images include Node.js 22, Git, GitHub CLI, and Playwright + Chromium via the shared `thepopebot-base`.

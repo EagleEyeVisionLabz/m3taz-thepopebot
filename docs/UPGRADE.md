@@ -21,15 +21,13 @@ This workflow only updates `package.json` and `package-lock.json`. It does **not
 
 Triggered automatically when the upgrade PR merges to `main`. This workflow detects the version change and:
 
-1. Runs `npx thepopebot init` inside the container to scaffold updated templates
-2. Commits any template changes back to `main`
-3. Updates `THEPOPEBOT_VERSION` in the server's `.env`
-4. Pulls the new Docker image for the event handler
-5. Stops the old container and starts a new one
-6. Runs `npm install --omit=dev` in the new container
-7. Builds `.next` and restarts PM2
+1. Runs `npx thepopebot init --no-install` inside the running container to scaffold updated templates against the project tree
+2. Runs `npm install` so the local CLI in `node_modules/thepopebot` matches the new version
+3. Commits any template changes back to `main` with a `[skip ci]` marker (so the rebuild doesn't loop)
+4. Pulls the new event-handler Docker image (which already contains the baked `.next` build + production `node_modules`)
+5. Stops and removes the old container, then `docker compose up -d` the new one
 
-If the version didn't change (normal code push), it skips steps 1-5 and does a fast rebuild only (npm install + build + PM2 reload).
+If the change isn't a version bump (normal code push) or only touches `logs/`, the workflow short-circuits — there is no in-container `.next` rebuild step anymore, since `.next` ships in the image.
 
 ## Recovering from a Failed Upgrade
 

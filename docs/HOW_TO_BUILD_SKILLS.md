@@ -148,8 +148,10 @@ Skills are bundled in `templates/skills/` and scaffolded into user projects by `
 
 | Skill | Description |
 |-------|-------------|
-| agent-job-secrets | List and retrieve agent secrets |
-| playwright-cli | Browser automation via Playwright CLI |
+| `agent-job-secrets` | List and retrieve agent-job secrets (OAuth credentials are auto-refreshed) |
+| `agent-job-dm` | List users + send a DM (or broadcast) via the recipient's default channel — defaults `--user-id` to the container's `USER_ID` env so chat-spawned jobs route back to the originator |
+| `agent-job-background` | Spawn a new agent job in the background and check its status — defaults `--user-id` to `USER_ID` so the spawned job inherits the originator |
+| `playwright-cli` | Browser automation via Playwright CLI |
 
 ## Where to find more skills
 

@@ -16,37 +16,33 @@ docker-compose up      # Start Traefik + event handler + runner
 
 ## Event Handler Docker Image
 
-The event handler Dockerfile (`docker/event-handler/Dockerfile`) uses a multi-stage build: the first stage installs build tools (python3, make, g++) to compile native addons during `npm install`, then the final image keeps only runtime dependencies (git, gh, PM2) and the pre-compiled `node_modules`. The `.next` build output is baked into the Docker image.
+The event handler Dockerfile (`docker/event-handler/Dockerfile`) is a 3-stage build:
 
-### How the two volume mounts work together
+1. **builder** (Debian / `node:22-bookworm-slim`) — installs build tools (python3, make, g++) and runs `npm install` to compile native addons (`better-sqlite3`, `sharp`).
+2. **next-builder** (same Debian image) — runs `next build`, producing `.next/` output.
+3. **runtime** (extends `thepopebot-base`, Ubuntu 24.04 + Node 22 + Chromium + playwright) — copies the pre-built `node_modules` and `.next/` from stages 1+2, plus PM2, gosu, and the agent runtime parity (jq, fonts, libnss, etc.) so the in-process Claude SDK can shell out to the same tools the interactive containers use.
 
-```yaml
-volumes:
-  - .:/app              # bind mount: host project → /app
-  - /app/node_modules   # anonymous volume: preserves container's node_modules
-```
+`better-sqlite3` and `sharp` prebuilds are glibc-forward-compatible, so building native modules on Debian and running them on Ubuntu works in practice (verified by smoke tests).
 
-The bind mount (`.:/app`) overlays the entire `/app` directory with the host's project files — app pages, config, `.next/`, `.env`, everything. This **would** also clobber the container's `/app/node_modules` with the host's macOS-compiled node_modules. But the anonymous volume (`/app/node_modules`) shields that specific path from the bind mount. Docker processes volume mounts so the anonymous volume "wins" for `/app/node_modules`. The first time the container starts, Docker copies the image's node_modules into the anonymous volume, and from then on it persists there independently.
+The `.next/` output and `node_modules` are **baked into the image** — there is no in-container `npm install` or `next build` at deploy time.
 
-So the host's node_modules (compiled for macOS) are never used inside the container. The container always uses its own Linux-compiled modules.
+### What the user project mounts
 
-### Why thepopebot is installed twice (host and container)
-
-The user runs `npm install` on the host (macOS) to get thepopebot and all dependencies. This is needed because `next build` must resolve all `thepopebot/*` imports to compile the app — without thepopebot in local node_modules, the build fails immediately on unresolved imports. The `.next/` output is just bundled JavaScript — it's platform-independent, so building on macOS and running on Linux is fine. But Next.js still needs `node_modules` at **runtime** for native modules (like `better-sqlite3`) and server-side requires that aren't bundled. Those native modules must be compiled for Linux, which is why the Docker image has its own separate `npm install`. Different purposes, different platforms, both necessary.
+The user's project directory only volume-mounts user-editable subdirectories into `/app` (e.g. `agent-job/`, `event-handler/`, `skills/`, `agents/`, `data/`, `.env`, `logs/`). The full project is also mounted at `/project` for git access. The image's own `/app/node_modules` and `/app/.next` are never overlaid because those paths aren't bind-mounted.
 
 ### Rebuilds after code changes
 
-After code changes are pushed to `main`, the `rebuild-event-handler.yml` workflow runs `next build` inside the container via `docker exec` (using the container's node_modules) and restarts PM2.
+When the upgrade PR for a new `thepopebot` version merges, `rebuild-event-handler.yml` pulls the new image (which already contains the rebuilt `.next` + `node_modules`), stops the old container, and `docker compose up -d` the new one. There is no in-container `next build` step. See [Upgrading](UPGRADE.md).
 
 ## docker-compose.yml Services
 
 | Service | Image | Purpose |
 |---------|-------|---------|
 | **traefik** | `traefik:v3` | Reverse proxy with automatic HTTPS (Let's Encrypt) |
-| **event-handler** | `stephengpope/thepopebot:event-handler-${THEPOPEBOT_VERSION}` | Node.js runtime + PM2, serves the bind-mounted Next.js app on port 80 |
-| **runner** | `myoung34/github-runner:latest` | Self-hosted GitHub Actions runner for executing jobs |
+| **event-handler** | `stephengpope/thepopebot:event-handler-${THEPOPEBOT_VERSION}` | Next.js runtime + PM2 (port 80). Spawns coding-agent containers locally via the Docker socket. |
+| **runner** | `myoung34/github-runner:latest` | Self-hosted GitHub Actions runner — used **only** for the upgrade and rebuild workflows |
 
-The runner registers as a self-hosted GitHub Actions runner. It has a read-only volume mount (`.:/project:ro`) so `upgrade-event-handler.yml` can run `docker compose` commands against the project's compose file. Agent job containers are launched directly by the event handler via the Docker API — they don't use GitHub Actions.
+The runner has a read-only volume mount (`.:/project:ro`) so `upgrade-event-handler.yml` can `docker compose` against the project's compose file. **Agent-job containers run locally**, launched by the event handler via the Docker API — they don't go through this runner or GitHub Actions.
 
 ## Deploy to a VPS
 

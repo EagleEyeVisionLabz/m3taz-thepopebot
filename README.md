@@ -1,57 +1,194 @@
-# ThePopeBot
+# thepopebot
 
-Build autonomous AI agents that work for you 24/7, individually or in teams.
+Your personal agent, coding environment, and communication platform — all in
+one app. Works with any LLM or coding agent. Designed to be simple, unified,
+secure, and easy.
 
-### What You Get
+- 💬 **Smart chat integrations** — Telegram today; Slack and Discord coming soon. Plus the built-in web chat.
+- 🧠 **Any LLM** — Anthropic, OpenAI, Google, DeepSeek, MiniMax, Mistral, xAI, Kimi, OpenRouter, or any OpenAI-compatible endpoint.
+- 🤖 **Any coding agent** — Claude Code, Codex, Gemini, OpenCode, Pi, or Kimi.
+- 💻 **Live coding workspaces** — open a terminal in your browser, attach to a running container, share the same session as your chat.
+- 🔧 **Real work, not just chat** — agent writes code, opens a PR, auto-merges, DMs you when it's done.
+- 🔐 **Yours, fully** — runs on your hardware, your repo, your tokens.
 
-- **Runs 24/7** — set up tasks and your agent handles them around the clock, no babysitting
-- **Does real work** — writes code, opens pull requests, completes multi-step tasks end to end
-- **Agent clusters** — build teams of agents that coordinate and work together on bigger jobs
-- **Full visibility** — every action is a commit you can review, approve, or undo
-
-<a href="https://www.skool.com/ai-architects"><img src="docs/hero.png" width="100" alt="ThePopeBot" /></a>
+<a href="https://www.skool.com/ai-architects"><img src="docs/hero.png" width="100" alt="thepopebot" /></a>
 
 [Get priority support HERE](https://www.skool.com/ai-architects)
 
 ---
 
-## How It Works
+## How it works
+
+Three doors, one brain:
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────┐         ┌─────────────────┐                     │
-│  │  Event Handler  │ ──1──►  │     GitHub      │                     │
-│  │ (creates branch)│         │(agent-job/* br) │                     │
-│  └────────▲────────┘         └─────────────────┘                     │
-│           │                                                          │
-│           │  2 (launches Docker container locally)                   │
-│           │                                                          │
-│           ▼                                                          │
-│  ┌─────────────────┐                                                 │
-│  │  Docker Agent   │                                                 │
-│  │ (coding agent)  │                                                 │
-│  └────────┬────────┘                                                 │
-│           │                                                          │
-│           │  3 (commits, pushes, creates PR)                         │
-│           │                                                          │
-│           ▼                                                          │
-│  ┌─────────────────┐                                                 │
-│  │     GitHub      │                                                 │
-│  │   (PR opened)   │                                                 │
-│  └────────┬────────┘                                                 │
-│           │                                                          │
-│           │  4a (auto-merge.yml)                                     │
-│           │  4b (rebuild-event-handler.yml)                          │
-│           │                                                          │
-│           5 (notify-pr-complete.yml →                                │
-│           │  webhook to event handler)                               │
-│           └──────────────────────────►  Event Handler                │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
+      ┌── Browser chat ──┐                  ┌── Telegram (verified per-user)
+      │                  ▼                  ▼
+      │            ┌──────────────────────────────────┐
+      │  attach    │           The Brain              │
+      │  a live    │     (your event handler)         │
+      │  terminal  │                                  │
+      │            │   • picks the LLM                │
+      │            │   • picks the coding agent       │
+      │            │   • remembers the session        │
+      │            │   • runs Docker for you          │
+      └── Code ────┤                                  │
+        workspace  └──────────────┬───────────────────┘
+                                  │
+                         ┌────────┴────────┐
+                         ▼                 ▼
+                  ┌─────────────┐   ┌─────────────────┐
+                  │  Live chat  │   │   Agent job     │
+                  │ (right now) │   │  (background)   │
+                  │             │   │                 │
+                  │ answers,    │   │ writes code,    │
+                  │ small edits │   │ opens a PR,     │
+                  │ live tools  │   │ auto-merges,    │
+                  │             │   │ DMs you back    │
+                  └─────────────┘   └─────────────────┘
 ```
 
-You interact with your bot via the web chat interface or Telegram (optional). The Event Handler creates an agent-job branch and launches a Docker container locally with the coding agent. The agent does the work, commits the results, pushes, and opens a PR. Auto-merge handles the rest. You get a notification when it's done.
+### Live chat vs. agent job
+
+| Path           | When                          | What happens                                       |
+|----------------|-------------------------------|----------------------------------------------------|
+| **Live chat**  | Quick questions, small edits  | Coding agent runs now, streams to your screen      |
+| **Agent job**  | "Build it. DM me when done."  | Background worker opens a PR, auto-merges, DMs you |
+
+### Two flavors of chat (`chatMode`)
+
+| `chatMode` | Repo & branch              | Use it for                                  |
+|------------|----------------------------|---------------------------------------------|
+| `agent`    | Your bot's own repo        | Talking *to* your bot — config, skills, ops |
+| `code`     | Any repo + branch you pick | Real coding sessions on a project           |
+
+### Live coding workspaces
+
+Open a workspace from any code-mode chat and the browser attaches a terminal
+to a persistent container running your coding agent of choice. Workspace and
+chat share the same session — fire a question in chat, hop into the terminal,
+the agent already knows what you were just talking about.
+
+### When you ask for a job
+
+```
+  you ──► chat ──► event handler ──► creates `agent-job/<id>` branch
+                                              │
+                                              ▼
+                                    launches a Docker container
+                                    locally (your chosen agent)
+                                              │
+                                              ▼
+                                    agent commits, pushes,
+                                    opens a PR
+                                              │
+                                              ▼
+                                    auto-merge.yml ──► merged
+                                              │
+                                              ▼
+                                    notify-pr-complete.yml ──► DM to you
+```
+
+---
+
+## Install
+
+### Prerequisites
+
+| Requirement | Install |
+|-------------|---------|
+| **Node.js 18+** | [nodejs.org](https://nodejs.org) |
+| **Git** | [git-scm.com](https://git-scm.com) |
+| **GitHub CLI** | [cli.github.com](https://cli.github.com) |
+| **Docker + Docker Compose** | [docker.com](https://docs.docker.com/get-docker/) |
+| **ngrok*** | [ngrok.com](https://ngrok.com/download) (free account + authtoken) |
+
+*\*ngrok is only needed for local installs without port forwarding. VPS/cloud deployments don't need it.*
+
+### Two steps
+
+```bash
+mkdir my-agent && cd my-agent
+npx thepopebot@latest init   # scaffold project
+npm run setup                 # interactive wizard
+```
+
+The wizard checks prerequisites, creates a GitHub repo, generates a PAT, configures your URL, and starts Docker. Visit your APP_URL when it finishes.
+
+> **Local installs**: your server needs to be reachable from the internet for GitHub webhooks and Telegram. Use [ngrok](https://ngrok.com) (`ngrok http 80`). If your ngrok URL changes, run `npx thepopebot set-var APP_URL <new-url>` and re-register the Telegram webhook from `/admin/event-handler/telegram`.
+
+---
+
+## Upgrade
+
+```bash
+npx thepopebot upgrade          # latest stable
+npx thepopebot upgrade @beta    # latest beta
+npx thepopebot upgrade 1.2.72   # specific version
+```
+
+Installs the new package, syncs managed files, rebuilds, restarts Docker.
+
+### What's protected, what gets updated
+
+Two kinds of files behave differently — by design, so an upgrade never blows
+away your customizations.
+
+```
+   ┌─ Managed files ──────────────┐   ┌─ Your files ─────────────────┐
+   │  .github/workflows/          │   │  agent-job/SYSTEM.md         │
+   │  docker-compose.yml          │   │  agent-job/CRONS.json        │
+   │  .gitignore                  │   │  event-handler/TRIGGERS.json │
+   │                              │   │  agents/, skills/            │
+   │  Always replaced with the    │   │  .env, secrets               │
+   │  latest version on every     │   │                              │
+   │  init / upgrade.             │   │  Never touched by upgrade.   │
+   └──────────────────────────────┘   └──────────────────────────────┘
+```
+
+So you never lose your work — but you might miss a useful template change.
+Three commands let you pull updates in deliberately:
+
+```bash
+npx thepopebot audit          # show what's drifted from the templates
+npx thepopebot diff <file>    # show the diff for one file
+npx thepopebot reset <file>   # replace one file with the latest template
+npx thepopebot reset-all      # ⚠ nuclear: wipe local edits, restore everything
+```
+
+Use them when release notes mention a SYSTEM.md or workflow improvement you want.
+
+> **Upgrade failed?** See [Recovering from a Failed Upgrade](docs/UPGRADE.md#recovering-from-a-failed-upgrade).
+
+---
+
+## Chat LLM vs Agent LLM
+
+Two layers, two LLMs (you choose whether they're the same).
+
+- **Chat LLM** — answers in the browser/Telegram in real time, runs in-process on your event handler.
+- **Agent LLM** — drives the coding agent inside Docker containers running locally on the same host. This is the LLM that writes your code.
+
+Same model for both, or split — fast model for chat, capable model for agent jobs. The setup wizard offers the split.
+
+### Using a Claude subscription
+
+If you have Claude Pro or Max, you can power agent jobs through your subscription instead of API billing. Generate a token:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude setup-token
+```
+
+Paste it (starts with `sk-ant-oat01-`) into the setup wizard. Usage counts toward your Claude.ai limits; you still need an API key for the chat side.
+
+See [Coding Agents](docs/CODING_AGENTS.md) for details on all six agent backends.
+
+---
+
+## Security
+
+thepopebot includes API key authentication, webhook secret validation (fail-closed), session encryption (AES-256-GCM keyed off `AUTH_SECRET`), per-job API keys with maintenance-cron expiry, and auto-merge path restrictions. All software carries risk — thepopebot is provided as-is, and you are responsible for securing your own infrastructure. If you're running locally with a tunnel, your dev server endpoints are publicly accessible with no rate limiting and no TLS on the local hop. Always set webhook secrets and an API key before exposing the server, and stop tunnels when you're done.
 
 ---
 
@@ -61,145 +198,14 @@ You interact with your bot via the web chat interface or Telegram (optional). Th
 
 ---
 
-## Get Started
-
-### Prerequisites
-
-| Requirement | Install |
-|-------------|---------|
-| **Node.js 18+** | [nodejs.org](https://nodejs.org) |
-| **npm** | Included with Node.js |
-| **Git** | [git-scm.com](https://git-scm.com) |
-| **GitHub CLI** | [cli.github.com](https://cli.github.com) |
-| **Docker + Docker Compose** | [docker.com](https://docs.docker.com/get-docker/) (installer requires admin password) |
-| **ngrok*** | [ngrok.com](https://ngrok.com/download) (free account + authtoken required) |
-
-*\*ngrok is only required for local installs without port forwarding. VPS/cloud deployments don't need it. [Sign up](https://dashboard.ngrok.com/signup) for a free ngrok account, then run `ngrok config add-authtoken <YOUR_TOKEN>` before starting setup.*
-
-### Two steps
-
-**Step 1** — Scaffold a new project:
-
-```bash
-mkdir my-agent && cd my-agent
-npx thepopebot@latest init
-```
-
-This creates a Next.js project with configuration files, GitHub Actions workflows, and agent templates. You don't need to create a GitHub repo first — the setup wizard handles that.
-
-**Step 2** — Run the setup wizard:
-
-```bash
-npm run setup
-```
-
-The wizard walks you through everything:
-- Checks prerequisites (Node.js, Git, GitHub CLI, Docker)
-- Creates a GitHub repository and pushes your initial commit
-- Creates a GitHub Personal Access Token (scoped to your repo)
-- Configures your public URL and webhook secret
-- Syncs settings to `.env`, database, and GitHub secrets/variables
-- Starts Docker for you
-
-**That's it.** Visit your APP_URL when the wizard finishes.
-
-- **Web Chat**: Visit your APP_URL to chat with your agent, create jobs, upload files
-- **Telegram** (optional): Connect a Telegram bot from `/admin/event-handler/telegram`
-- **Webhook**: Send a POST to `/api/create-agent-job` with your API key to create jobs programmatically
-- **Cron**: Edit `agent-job/CRONS.json` to schedule recurring jobs
-
-### Chat vs Agent LLM
-
-Your bot has two sides — a **chat** side and an **agent** side.
-
-**Chat** is the conversational part. When you talk to your bot in the web UI or Telegram, it uses the chat LLM. This runs on your server and responds in real time.
-
-**Agent** is the worker. When your bot needs to write code, modify files, or do a bigger task, it spins up a separate job that runs in a Docker container on GitHub. That job uses the agent LLM.
-
-By default, both use the same model. But during setup, you can choose different models for each — for example, a faster model for chat and a more capable one for agent jobs. The wizard asks "Would you like agent jobs to use different LLM settings?" and lets you pick.
-
-### Using a Claude Subscription (OAuth Token)
-
-If you have a Claude Pro ($20/mo) or Max ($100+/mo) subscription, you can use it to power your agent jobs instead of paying per API call. During setup, choose Anthropic as your agent provider and say yes when asked about a subscription.
-
-You'll need to generate a token:
-
-```bash
-# Install Claude Code CLI (if you don't have it)
-npm install -g @anthropic-ai/claude-code
-
-# Generate your token (opens browser to log in)
-claude setup-token
-```
-
-Paste the token (starts with `sk-ant-oat01-`) into the setup wizard. Your agent jobs will now run through your subscription. Note that usage counts toward your Claude.ai limits, and you still need an API key for the chat side.
-
-See [Coding Agents](docs/CODING_AGENTS.md) for details on all five agent backends.
-
-> **Local installs**: Your server needs to be reachable from the internet for GitHub webhooks and Telegram. On a VPS/cloud server, your APP_URL is just your domain. For local development, use [ngrok](https://ngrok.com) (`ngrok http 80`) or port forwarding to expose your machine.
->
-> **If your ngrok URL changes** (it changes every time you restart ngrok on the free plan), you must update APP_URL everywhere:
->
-> ```bash
-> # Update .env and GitHub variable in one command:
-> npx thepopebot set-var APP_URL https://your-new-url.ngrok.io
-> ```
->
-> If Telegram is configured, click **Re-register webhook** at `/admin/event-handler/telegram` after the URL change.
-
----
-
-## Updating
-
-```bash
-npx thepopebot upgrade          # latest stable
-npx thepopebot upgrade @beta    # latest beta
-npx thepopebot upgrade 1.2.72   # specific version
-```
-
-Saves your local changes, syncs with GitHub, installs the new version, rebuilds, pushes, and restarts Docker.
-
-**What it does:**
-
-1. Saves any local changes you've made
-2. Pulls the latest from GitHub (stops if there are conflicts)
-3. Installs the new version and updates project files
-4. Rebuilds your project
-5. Pushes everything to GitHub
-6. Restarts Docker containers (if running)
-
-Pushing to `main` triggers the `rebuild-event-handler.yml` workflow on your server. It detects the version change, runs `thepopebot init`, updates `THEPOPEBOT_VERSION` in the server's `.env`, pulls the new Docker image, restarts the container, rebuilds `.next`, and reloads PM2 — no manual `docker compose` needed.
-
-> **Upgrade failed?** See [Recovering from a Failed Upgrade](docs/UPGRADE.md#recovering-from-a-failed-upgrade).
-
-See [CLI Reference](docs/CLI.md) for full details on `init`, managed vs user files, template conventions, and all CLI commands.
-
----
-
-## Security
-
-thepopebot includes API key authentication, webhook secret validation (fail-closed), session encryption, secret filtering in the Docker agent, and auto-merge path restrictions. However, all software carries risk — thepopebot is provided as-is, and you are responsible for securing your own infrastructure. If you're running locally with a tunnel (ngrok, Cloudflare Tunnel, port forwarding), be aware that your dev server endpoints are publicly accessible with no rate limiting and no TLS on the local hop.
-
-See [Security](docs/SECURITY.md) for full details on what's exposed, the risks, and recommendations.
-
----
-
-## Different Models
-
-thepopebot supports 9 built-in LLM providers (Anthropic, OpenAI, Google, DeepSeek, MiniMax, Mistral, xAI, Kimi, OpenRouter) plus custom OpenAI-compatible endpoints. The chat layer and coding agents are independent — use Claude for interactive chat and a different model for code tasks, or run everything on a single provider.
-
-See [Different Models](docs/RUNNING_DIFFERENT_MODELS.md) for the full provider reference, admin UI configuration, per-job overrides, and custom provider setup.
-
----
-
 ## Known Issues
 
 ### Windows: `SQLITE_IOERR_SHMOPEN`
 
 SQLite can't create or open its shared-memory (`.shm`) file. Common causes:
 
-- **Antivirus** (Windows Defender, etc.) locking the database files — add your project folder to the exclusion list
-- **Cloud-synced folders** (OneDrive, Dropbox, Google Drive) — move your project to a non-synced directory like `C:\Projects\`
+- **Antivirus** locking the database — add your project folder to the exclusion list
+- **Cloud-synced folders** (OneDrive, Dropbox, Google Drive) — move your project to a non-synced directory
 
 ---
 
@@ -209,20 +215,19 @@ SQLite can't create or open its shared-memory (`.shm`) file. Common causes:
 |----------|-------------|
 | [Architecture](docs/ARCHITECTURE.md) | Two-layer design, file structure, API endpoints, GitHub Actions, Docker agent |
 | [CLI Reference](docs/CLI.md) | `init`, managed vs user files, template conventions, all CLI commands |
-| [Configuration](docs/CONFIGURATION.md) | Admin UI, DB-backed config, infrastructure variables, GitHub secrets, Docker Compose |
-| [Customization](docs/CUSTOMIZATION.md) | Personality, skills, operating system files, using your bot, security details |
+| [Configuration](docs/CONFIGURATION.md) | Admin UI, DB-backed config, infrastructure variables, Docker Compose |
+| [Customization](docs/CUSTOMIZATION.md) | Personality, skills, operating system files, using your bot |
 | [Chat Integrations](docs/CHAT_INTEGRATIONS.md) | Web chat, Telegram, adding new channels |
 | [Different Models](docs/RUNNING_DIFFERENT_MODELS.md) | 9 built-in LLM providers, chat vs coding agent config, per-job overrides, custom providers |
 | [Auto-Merge](docs/AUTO_MERGE.md) | Auto-merge controls, ALLOWED_PATHS configuration |
 | [Deployment](docs/DEPLOYMENT.md) | VPS setup, Docker Compose, HTTPS with Let's Encrypt |
-| [Coding Agents](docs/CODING_AGENTS.md) | 5 coding agent backends, OAuth tokens, LiteLLM proxy, per-agent config |
+| [Coding Agents](docs/CODING_AGENTS.md) | 6 coding agent backends, OAuth tokens, LiteLLM proxy, per-agent config |
 | [How to Build Skills](docs/HOW_TO_BUILD_SKILLS.md) | Guide to building and activating agent skills |
 | [Pre-Release](docs/PRE_RELEASE.md) | Installing beta/alpha builds |
 | [Code Workspaces](docs/CODE_WORKSPACES.md) | Interactive Docker containers with in-browser terminal |
 | [Clusters](docs/CLUSTERS.md) | Agent clusters — groups of Docker containers spawned from role definitions |
 | [Hacks](docs/HACKS.md) | Tips, tricks, and workarounds |
 | [Mobile Testing](docs/MOBILE_TESTING.md) | Testing on mobile devices |
-| [Security](docs/SECURITY.md) | Security disclaimer, local development risks |
 | [Upgrading](docs/UPGRADE.md) | Automated upgrades, recovering from failed upgrades |
 
 ### Maintainer

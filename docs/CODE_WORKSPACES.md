@@ -110,4 +110,20 @@ Code workspaces require:
 - **`GH_TOKEN`** — A GitHub token for cloning repositories
 - **Coding agent credentials** — OAuth token or API key for your selected coding agent, configured at Admin > Event Handler > Coding Agents
 
-These are configured during initial setup. See [Coding Agents](CODING_AGENTS.md) for details on the five supported backends and their auth modes.
+These are configured during initial setup. See [Coding Agents](CODING_AGENTS.md) for details on the six supported backends and their auth modes.
+
+---
+
+## Workspace Commands
+
+The toolbar in a code workspace can launch one-shot **command containers** against the workspace volume. They run the same coding agent as the workspace, but headlessly with a focused git prompt:
+
+| Command | What it does |
+|---------|--------------|
+| `commit` | Stages all changes, writes a conventional commit message, commits |
+| `push` | Stages, commits, and pushes the branch to origin |
+| `create-pr` | Ensures changes are committed and pushed, then creates/updates a PR |
+| `pull` | Fetches from origin and rebases onto the base branch (resolves conflicts) |
+| `pull-push` | Combined: commits any local changes, fetches, rebases onto the same-name remote branch, then pushes |
+
+Prompts live in `lib/git-commands.js` — same source of truth used by the chat dropdown, the workspace toolbar, and the auto-run on chat finish. Command containers are uniquely named (`command-<cmd>-<shortId>-<rand>`) so repeated invocations don't collide, and they're removed automatically when the log stream ends.

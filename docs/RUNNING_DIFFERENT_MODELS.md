@@ -13,10 +13,12 @@ All LLM configuration is managed through the admin UI. The `.env` file is only u
 
 ## Configuring the Chat Model
 
-The chat model controls all Event Handler LLM interactions: web chat, Telegram replies, webhook trigger processing, and job completion summaries.
+Two LLMs sit on the event-handler side, each independently configured:
 
-1. **Add API keys**: Go to **Admin > Event Handler > LLMs** (`/admin/event-handler/llms`) to add your provider API keys.
-2. **Select provider and model**: Go to **Admin > Event Handler > Chat** (`/admin/event-handler/chat`) to choose your provider and model.
+- **Live chat LLM** — drives streaming chat in the browser and Telegram. For agents with an SDK adapter (Claude Code today) the chat runs in-process; for everyone else the chat runs in an ephemeral headless container. The model selection rides with the coding agent (see [Coding Agents](CODING_AGENTS.md)) — there's no separate "chat model" slot anymore.
+- **Helper LLM** — short one-shot completions used by the event handler itself: chat auto-titles, agent-job titles, PR-merge summaries. Configured at **Admin > Event Handler > Helper LLM** (`/admin/event-handler/helper-llm`).
+
+Add provider API keys at **Admin > Event Handler > LLMs** (`/admin/event-handler/llms`). The same keys back both layers.
 
 `LLM_MAX_TOKENS` defaults to 4096.
 
@@ -30,7 +32,7 @@ See [CODING_AGENTS.md](CODING_AGENTS.md) for details.
 
 Agent-type entries in `agent-job/CRONS.json` and actions in `event-handler/TRIGGERS.json` accept two optional override fields:
 
-- **`agent_backend`** — pick which coding agent runs the job, overriding the default set in Admin > Event Handler > Coding Agents. Values: `claude-code`, `codex-cli`, `gemini-cli`, `pi`, `opencode`, `kimi-cli`. The provider is implicit in the agent (e.g. `codex-cli` → OpenAI, `gemini-cli` → Google).
+- **`agent_backend`** — pick which coding agent runs the job, overriding the default set in Admin > Event Handler > Coding Agents. Values: `claude-code`, `codex-cli`, `gemini-cli`, `pi-coding-agent`, `opencode`, `kimi-cli`. The provider is implicit in the agent (e.g. `codex-cli` → OpenAI, `gemini-cli` → Google).
 - **`llm_model`** — override the model used within the selected coding agent. The value must be a model the chosen agent supports (e.g. `claude-opus-4-7` for Claude Code, `gpt-5.4` for Codex).
 
 ```json
@@ -63,7 +65,7 @@ The coding agent must be enabled in the admin UI before an override can select i
 
 **Provider notes:**
 
-- **Google Gemini**: `gemini-2.5-pro` and `gemini-3.*` models auto-fallback to `gemini-2.5-flash` for chat due to a LangChain compatibility issue ([#201](https://github.com/thepopebotbot/thepopebot/issues/201)). They work fine as coding agent models.
+- **Google Gemini**: `gemini-2.5-pro` and `gemini-3.*` "thinking" models auto-fallback to `gemini-2.5-flash` for the helper LLM (the helper layer doesn't tolerate the thinking-token output). They work fine as coding agent models.
 - **OpenRouter**: No pre-defined model list — type in the model ID you want (e.g. `anthropic/claude-sonnet-4-6`).
 
 ## Adding Custom Providers
@@ -92,9 +94,9 @@ Set this as the base URL when adding a custom provider in the admin UI. Most loc
 
 | What | Where to configure |
 |------|--------------------|
-| Chat model (web chat, Telegram, webhooks) | Admin > Event Handler > Chat |
+| Helper LLM (auto-titles, summaries) | Admin > Event Handler > Helper LLM |
 | API keys and providers | Admin > Event Handler > LLMs |
-| Coding agent model (workspaces, jobs) | Admin > Event Handler > Coding Agents |
+| Coding agent model (live chat, workspaces, jobs) | Admin > Event Handler > Coding Agents |
 | Per-job override | `agent_backend` + `llm_model` in `agent-job/CRONS.json` or `event-handler/TRIGGERS.json` |
 | Custom provider (cloud) | Admin > Event Handler > LLMs > Add custom provider with base URL |
 | Custom provider (local) | Same as above, use `http://host.docker.internal:<port>/v1` as base URL |

@@ -5,7 +5,7 @@
 `templates/skills/` contains regular tracked files (not a submodule). To update from the upstream [badlogic/pi-skills](https://github.com/badlogic/pi-skills) repo:
 
 ```bash
-# Remove the old skill files (preserve agent-job-secrets, playwright-cli)
+# Remove the old skill files (preserve agent-job-secrets, agent-job-dm, agent-job-background, playwright-cli)
 rm -rf templates/skills/brave-search templates/skills/README.md templates/skills/LICENSE
 
 # Download and extract the latest tarball

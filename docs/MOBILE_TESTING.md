@@ -38,10 +38,13 @@ Before any manual testing, run a programmatic overflow check on every page. This
 **Pages to check** (discover more by exploring the sidebar):
 
 ```
-/, /chats, /runners, /notifications, /pull-requests,
-/settings/crons, /settings/triggers, /settings/secrets,
-/clusters/list, /clusters/roles
+/, /chats, /runners, /messages, /pull-requests, /containers,
+/admin/general, /admin/event-handler/coding-agents,
+/admin/event-handler/agent-secrets, /admin/crons, /admin/triggers,
+/admin/api-keys, /admin/users, /admin/github
 ```
+
+The Clusters sidebar entry is currently hidden behind a feature flag, so cluster pages aren't reachable via nav — skip them for sidebar-driven testing.
 
 For each page:
 ```javascript
@@ -89,18 +92,28 @@ Visit each page and interact with everything you find. Don't just look — tap i
 
 | Route | Key elements to test |
 |-------|---------------------|
-| `/` (new chat) | Chat input, attach button, voice button, code mode toggle, repo/branch selectors in code mode |
-| `/chat/{id}` | Message bubbles, message toolbar (copy/retry/edit — tap ALL of them), chat header title dropdown (caret), inline rename, send message, attach files, voice input |
+| `/` (new chat) | Chat input, attach button, voice button, code mode toggle, repo/branch selectors in code mode, agent-secrets key icon (agent-mode only), Plan/Code toggle |
+| `/chat/{id}` | Message bubbles, message toolbar (copy/retry/edit — tap ALL of them), chat header title dropdown (caret), inline rename, send message, attach files, voice input, auto-run spinner in workspace bar |
 | `/chats` | Search, chat list with 3-dot menus, date-grouped sections, rename/delete/star actions from 3-dot menu |
 | `/runners` | Runner list, status badges, refresh button, pagination (Previous/Next), "View" links |
 | `/pull-requests` | PR list, status indicators, refresh button |
-| `/notifications` | Notification cards with markdown content, timestamps |
-| `/settings/crons` | Tab bar, cron cards with expand/collapse, type/status badges, expanded content |
-| `/settings/triggers` | Tab bar, trigger cards with expand/collapse, expanded content |
-| `/settings/secrets` | API key create/copy/regenerate/delete — test the full flow |
-| `/clusters/list` | Search, cluster cards, "New cluster" button |
-| `/clusters/roles` | Role cards, edit/delete icons, "New role" button |
-| `/clusters/{id}` | Worker cards, status badges, action buttons, trigger config |
+| `/messages` | Inbox / All tabs, click-to-mark-read, mark-all-as-read button, markdown content rendering |
+| `/containers` | Live container rows, per-row logs button (FileTextIcon) |
+| `/profile/login` | Email/password change form |
+| `/profile/telegram` | One-time code generation, verify status |
+| `/admin/general` | General settings card |
+| `/admin/event-handler/coding-agents` | Default Coding Agent dropdown, per-agent enable/auth/provider/model cards, per-mode Branch/Git action/Auto-run toggles |
+| `/admin/event-handler/agent-secrets` | Agent-job secret create/edit/delete |
+| `/admin/event-handler/llms` | Provider API key cards + custom OpenAI-compatible providers |
+| `/admin/event-handler/helper-llm` | Helper LLM provider/model picker |
+| `/admin/event-handler/telegram` | Bot token + Register webhook button |
+| `/admin/event-handler/voice` | AssemblyAI key |
+| `/admin/event-handler/webhooks` | Webhook secret management |
+| `/admin/crons` | Cron cards (read-only listing of `agent-job/CRONS.json`) |
+| `/admin/triggers` | Trigger cards (read-only listing of `event-handler/TRIGGERS.json`) |
+| `/admin/api-keys` | API key create/copy/regenerate/delete — test the full flow |
+| `/admin/users` | User list with role badges |
+| `/admin/github` | GitHub variables + tokens |
 
 **But don't stop here.** If you discover pages or UI elements not in this list, test those too.
 
