@@ -459,6 +459,26 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
                   inputClass={inputClass}
                 />
                 <div>
+                  <label className="text-xs font-medium mb-1 block">Redirect URI</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={redirectUri}
+                      readOnly
+                      className={`${inputClass} text-muted-foreground bg-muted flex-1`}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyRedirectUri}
+                      className="rounded-md px-2.5 py-1.5 text-xs border border-border text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                      title="Copy redirect URI"
+                    >
+                      {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Add this URL as a redirect URI in your OAuth app.</p>
+                </div>
+                <div>
                   <label className="text-xs font-medium mb-1 block">Client ID</label>
                   <input
                     type="text"
@@ -488,26 +508,6 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
                     className={`${inputClass} resize-y`}
                   />
                   <p className="text-xs text-muted-foreground mt-1">Predefined scopes. Edit if needed.</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium mb-1 block">Redirect URI</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={redirectUri}
-                      readOnly
-                      className={`${inputClass} text-muted-foreground bg-muted flex-1`}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCopyRedirectUri}
-                      className="rounded-md px-2.5 py-1.5 text-xs border border-border text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                      title="Copy redirect URI"
-                    >
-                      {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">Add this URL as a redirect URI in your OAuth app.</p>
                 </div>
               </>
             )}
