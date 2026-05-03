@@ -1,132 +1,27 @@
-# skills/ — Agent Skills
+# skills/ — Activation Surface
 
-Skills are lightweight plugins that extend agent abilities. Each skill lives in `skills/<skill-name>/`.
+This directory is **not** where skills live. It's where active skills are turned on.
 
-## How Skills Work
+The real skill files (SKILL.md, scripts, package.json, etc.) live in `skills-library/`. Each entry here is a **symlink** pointing at a skill in `skills-library/`. The coding agents discover skills by walking into this directory through their per-agent bridges (`.claude/skills`, `.pi/skills`, `.codex/skills`, `.gemini/skills`, `.kimi/skills` → `../skills`).
 
-1. **Discovery** — The system scans `skills/` for directories containing `SKILL.md`.
-2. **Frontmatter loaded** — The `description` from YAML frontmatter is included in the system prompt under "Active skills" (via the `{{skills}}` template variable).
-3. **Full SKILL.md read on demand** — When the agent decides to use a skill, it reads the full `SKILL.md` for detailed usage instructions.
-
-All coding agents discover skills from the same `skills/` directory (via `.pi/skills`, `.claude/skills`, etc. symlink bridges).
-
-## Conventions
-
-### Language Preference
-
-**Bash first.** Skills are glue code — API calls, data piping, file manipulation. Bash + curl + python3 (for JSON) handles nearly everything. No module systems, no dependency management, no surprises.
-
-Use Node.js **only** when a required library has no alternative (e.g., `youtube-transcript-plus`). Never for new skills where bash + curl would work.
-
-### Bash Script Standards
-
-- Include `#!/bin/bash` and `set -euo pipefail` at the top
-- `chmod +x` after creating
-
-### Node.js Module Rules
-
-The root `package.json` has `"type": "module"`, which forces **all** `.js` files in the project tree to be treated as ESM. This silently breaks any script using `require()`.
-
-- **`.cjs`** — for CommonJS scripts (uses `require()`)
-- **`.mjs`** — for ESM scripts (uses `import`)
-- **Never use plain `.js`** for skill scripts. The behavior depends on the nearest `package.json` and will break unpredictably.
-
-If you encounter a broken `.js` script in a skill, rename it to `.cjs` or `.mjs` as appropriate and update SKILL.md references.
-
-### SKILL.md Format
-
-Every skill must have a `SKILL.md` with YAML frontmatter:
-
-```markdown
----
-name: skill-name-in-kebab-case
-description: One sentence describing what the skill does and when to use it.
----
-
-# Skill Name
-
-## Usage
+## Activate a skill
 
 ```bash
-skills/skill-name/script.sh <args>
+ln -s ../skills-library/<skill-name> skills/<skill-name>
 ```
-```
 
-- The `description` field appears in the system prompt — keep it concise and action-oriented.
-- Use project-root-relative paths in documentation (e.g., `skills/skill-name/script.sh`).
-
-### Skill Structure
-
-- **`SKILL.md`** (required) — YAML frontmatter + markdown documentation
-- **Scripts** — bash (`.sh`) by default, `.cjs`/`.mjs` only when necessary
-- **`package.json`** (optional) — only if Node.js dependencies are truly needed
-
-### Credential Setup
-
-If a skill needs an API key, add it via the admin UI (Settings > Agent Jobs > Secrets). The secret will be injected as an env var into Docker containers. The agent can discover available secrets via the `get-secret` skill.
-
-### Activation & Deactivation
-
-Skills are active when present in the `skills/` directory. To deactivate, remove or move the skill directory out.
-
-All coding agents discover skills from the same `skills/` directory via symlink bridges created by `npx thepopebot init`:
-
-- `.claude/skills → ../skills` (Claude Code)
-- `.pi/skills → ../skills` (Pi)
-- `.codex/skills → ../skills` (Codex CLI)
-- `.gemini/skills → ../skills` (Gemini CLI)
-- `.kimi/skills → ../skills` (Kimi CLI)
-- `.agents/skills → ../skills` (OpenCode and other plugin-style agents)
-
-## Creating a Skill
-
-### Simple bash skill (most common)
+## Deactivate a skill
 
 ```bash
-mkdir skills/my-skill
+rm skills/<skill-name>
 ```
 
-**skills/my-skill/SKILL.md:**
-```markdown
----
-name: my-skill
-description: Does X when the agent needs to Y.
----
+This only removes the symlink — the skill source in `skills-library/<skill-name>/` is untouched and can be re-activated later.
 
-# My Skill
+## Add a new skill
 
-## Setup
-Requires MY_API_KEY environment variable.
+Don't put real files here. Create the skill in `skills-library/<your-skill>/`, then symlink it into this directory. See `skills-library/CLAUDE.md` for the full guide.
 
-## Usage
-```bash
-skills/my-skill/run.sh <args>
-```
-```
+## First-init activation
 
-**skills/my-skill/run.sh:**
-```bash
-#!/bin/bash
-set -euo pipefail
-
-if [ -z "$1" ]; then echo "Usage: run.sh <args>"; exit 1; fi
-if [ -z "$MY_API_KEY" ]; then echo "Error: MY_API_KEY not set"; exit 1; fi
-# ... skill logic
-```
-
-Then make it executable:
-```bash
-chmod +x skills/my-skill/run.sh
-```
-
-### Node.js skill
-
-Use only when a required library has no bash/curl alternative. Add a `package.json` with dependencies — they're installed automatically in Docker. Use `.cjs` for CommonJS or `.mjs` for ESM — never plain `.js`.
-
-## Testing
-
-Always build AND test a skill in the same job. Tell the agent to test with real input after creating the skill and fix any issues before committing.
-
-## Default Skills
-
-Check `skills/` for available built-in skills (e.g., `agent-job-secrets`, `agent-job-dm`, `agent-job-background`, `playwright-cli`).
+`npx thepopebot init` populates this directory with a symlink for every skill in `skills-library/` **only on first install** (when this directory does not yet exist). Subsequent `init` / `upgrade` runs leave it alone — new bundled skills land in `skills-library/` un-activated, and you choose whether to symlink them.

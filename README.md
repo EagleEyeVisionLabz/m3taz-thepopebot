@@ -141,9 +141,9 @@ away your customizations.
    │  .github/workflows/          │   │  agent-job/SYSTEM.md         │
    │  docker-compose.yml          │   │  agent-job/CRONS.json        │
    │  .gitignore                  │   │  event-handler/TRIGGERS.json │
-   │                              │   │  agents/, skills/            │
-   │  Always replaced with the    │   │  .env, secrets               │
-   │  latest version on every     │   │                              │
+   │                              │   │  agents/                     │
+   │  Always replaced with the    │   │  skills-library/, skills/    │
+   │  latest version on every     │   │  .env, secrets               │
    │  init / upgrade.             │   │  Never touched by upgrade.   │
    └──────────────────────────────┘   └──────────────────────────────┘
 ```

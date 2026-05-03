@@ -129,6 +129,11 @@ async function init(options = {}) {
 
   console.log('\nScaffolding thepopebot project...\n');
 
+  // Capture pre-init state of skills/ so we know whether to populate
+  // first-init activation symlinks below. Must be checked BEFORE scaffolding,
+  // since templates/skills/CLAUDE.md.template will create skills/ as a side effect.
+  const isFreshSkillsInstall = !fs.existsSync(path.join(cwd, 'skills'));
+
   const templateFiles = getTemplateFiles(templatesDir);
   const created = [];
   const skipped = [];
@@ -292,6 +297,23 @@ async function init(options = {}) {
     }
   }
 
+  // First-init activation: populate skills/<X> → ../skills-library/<X> symlinks
+  // for every bundled skill. Only runs when skills/ did not pre-exist, so users
+  // who deactivate a skill (rm skills/<X>) don't get it auto-reactivated on upgrade.
+  if (isFreshSkillsInstall) {
+    const libraryDir = path.join(cwd, 'skills-library');
+    if (fs.existsSync(libraryDir)) {
+      const entries = fs.readdirSync(libraryDir, { withFileTypes: true });
+      fs.mkdirSync(path.join(cwd, 'skills'), { recursive: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const link = path.join(cwd, 'skills', entry.name);
+        if (fs.existsSync(link)) continue;
+        createDirLink(`../skills-library/${entry.name}`, link);
+        console.log(`  Activated skills/${entry.name} → ../skills-library/${entry.name}`);
+      }
+    }
+  }
 
   // Report backed-up files
   if (backedUp.length > 0) {

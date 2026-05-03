@@ -354,7 +354,7 @@ When `SCOPE` is set (e.g. `SCOPE=agents/triage`), the entrypoint scripts adjust:
 
 - **Working directory** — `cd $WORKSPACE/agents/triage` instead of `$WORKSPACE`. Set up by `scripts/common/scope.sh` (sourced by interactive + headless flows).
 - **System prompt resolution** — `agents/triage/SYSTEM.md` is preferred over the default `event-handler/agent-chat/SYSTEM.md`.
-- **Skills** — falls back through `agents/triage/skills/` → root `skills/` (handled by the host-side `lib/ai/scope.js`; the container just sees the resolved system prompt + working directory).
+- **Skills** — falls back through `agents/triage/skills/` → root `skills/` (handled by the host-side `lib/ai/scope.js`; the container just sees the resolved system prompt + working directory). Root `skills/` is the activation surface — its entries are symlinks into `skills-library/`. Scoped `agents/<name>/skills/` can be a mix of real overrides and symlinks back to `../../skills-library/<name>`.
 - **Session paths** — sessions go under `.{agent}-ttyd-sessions/agents/triage/${PORT}`. This means each scoped agent has an isolated session-file namespace even on the same shared volume.
 
 `SCOPE` is set by `lib/tools/docker.js` when launching agent-job, headless, or interactive containers, based on the workspace's `scope` column or the cron/trigger `scope` field.
@@ -444,4 +444,4 @@ When an agent scope is set (e.g., `agents/gary-vee`), `buildCodingAgentSystemPro
 
 ## Browser Automation
 
-All agents get browser automation via the `playwright-cli` skill in `skills/`. The skill is available to every agent through the skill bridge symlinks (`.claude/skills`, `.pi/skills`, etc. → `../skills/`). The `{{skills}}` template variable resolves the skill description into each agent's system prompt. No per-agent MCP registration needed.
+All agents get browser automation via the `playwright-cli` skill — its source lives in `skills-library/playwright-cli/`, activated via the symlink `skills/playwright-cli → ../skills-library/playwright-cli`. The skill is available to every agent through the per-agent bridges (`.claude/skills`, `.pi/skills`, etc. → `../skills/`). The `{{skills}}` template variable resolves the skill description into each agent's system prompt. No per-agent MCP registration needed.

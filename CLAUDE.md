@@ -8,7 +8,7 @@ Technical reference for AI assistants modifying the thepopebot NPM package sourc
 
 The npm package (`api/`, `lib/`, `config/`, `bin/`) is published to npm. In production:
 
-- **Event handler**: Docker image bakes the npm package, Next.js app source (`web/`), and `.next` build output. User project directories (`agent-job/`, `event-handler/`, `skills/`, `.env`, `data/`, etc.) are individually volume-mounted into `/app`. The full project is also mounted at `/project` for git access. Runs `server.js` via PM2 behind Traefik reverse proxy.
+- **Event handler**: Docker image bakes the npm package, Next.js app source (`web/`), and `.next` build output. User project directories (`agent-job/`, `event-handler/`, `skills/`, `skills-library/`, `.env`, `data/`, etc.) are individually volume-mounted into `/app`. The full project is also mounted at `/project` for git access. Runs `server.js` via PM2 behind Traefik reverse proxy.
 - **`lib/paths.js`**: Exports `PROJECT_ROOT` (`process.cwd()`). This is how the installed npm package finds the volume-mounted user project files.
 - **Agent-job containers**: Ephemeral Docker containers clone `agent-job/*` branches separately — use named volumes for workspace. See `docker/CLAUDE.md`.
 - **Local install**: Gives users CLI tools (`init`, `setup`, `upgrade`) and configuration scaffolding.
@@ -136,7 +136,13 @@ Both use `lib/tools/docker.js` for container lifecycle via Unix socket API.
 
 ## Skills System
 
-Skills live in `skills/`. Each skill is a directory with a `SKILL.md` containing YAML frontmatter (`name`, `description`). The `{{skills}}` template variable in markdown files resolves skill descriptions at runtime. Default skills: `agent-job-secrets` (list/get secrets), `agent-job-dm` (list users + send a DM/broadcast via the recipient's default channel), `agent-job-background` (spawn/check background agent jobs — defaults `--user-id` to the running container's `USER_ID` env so spawned jobs inherit the originator), `playwright-cli`. Agent-specific bridges (`.claude/skills`, `.pi/skills`, etc.) symlink to `skills/`.
+Skill source files live in `skills-library/<skill-name>/SKILL.md` (canonical store). The `skills/` directory is the **activation surface** — each entry there is a symlink to `../skills-library/<skill-name>`, and only symlinked skills are visible to coding agents. Removing a symlink in `skills/` deactivates the skill without deleting its source.
+
+`init` populates `skills/` with one symlink per bundled skill **only on first install** (when `skills/` did not pre-exist). Subsequent `init`/`upgrade` runs leave `skills/` untouched — new bundled skills land in `skills-library/` un-activated, and the user must `ln -s ../skills-library/<X> skills/<X>` to activate.
+
+Each skill has a `SKILL.md` with YAML frontmatter (`name`, `description`). The `{{skills}}` template variable in markdown files resolves skill descriptions at runtime by scanning `skills/` (which follows symlinks via `lib/utils/render-md.js`). Default skills: `agent-job-secrets`, `agent-job-dm`, `agent-job-background`, `playwright-cli`. Agent-specific bridges (`.claude/skills`, `.pi/skills`, etc.) symlink to `skills/`.
+
+User-authored skills live in `skills-library/<your-skill>/`, activated via symlink in `skills/`. Don't put real files in `skills/`.
 
 ## Template Config & Markdown Includes
 

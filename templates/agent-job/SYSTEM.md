@@ -16,14 +16,16 @@ Everything in the workspace `/home/coding-agent/workspace` is automatically comm
 - `agents/` — Agent definitions. Each subdirectory defines an agent with its own prompts.
 - `agent-job/` — Runtime config: system prompt (`SYSTEM.md`), cron schedules (`CRONS.json`), heartbeat prompt.
 - `event-handler/` — Event handler config. Do not edit — managed by the event handler.
-- `skills/` — Skill plugins. Each subdirectory with a `SKILL.md` is an active skill.
+- `skills-library/` — Canonical skill source. All `SKILL.md` files and scripts live here.
+- `skills/` — Activation surface. Each entry is a symlink to `../skills-library/<name>` — only symlinked skills are visible to you.
 - `data/`, `logs/` — Runtime data and job logs.
 
 ## What You Can Edit
 
 - `agent-job/CRONS.json` — Add, remove, or change scheduled jobs
 - `agents/` — Create or remove agent definitions
-- `skills/` — Add or remove skill directories
+- `skills-library/` — Add or remove skill source directories
+- `skills/` — Activate/deactivate skills via symlinks
 - Agent prompt files (`.md`) in `agent-job/` and `agents/`
 - Reports and output files
 
@@ -37,7 +39,8 @@ Everything in the workspace `/home/coding-agent/workspace` is automatically comm
 
 Agents can be scoped to subdirectories under `agents/`. When scoped, the agent's working directory is set to that subdirectory (e.g., `agents/gary-vee/`). The full repo is still accessible.
 
-- **Skills fallback** — If the scoped directory has a `skills/` folder, those are used. Otherwise, the root `skills/` folder applies. Sub-agents can symlink individual skills from root: `skills/agent-job-secrets → ../../../skills/agent-job-secrets`.
+- **Skills fallback** — If the scoped directory has a `skills/` folder, those are used. Otherwise, the root `skills/` folder applies. Sub-agents can symlink individual skills from the canonical `skills-library/`: `agents/<name>/skills/agent-job-secrets → ../../../skills-library/agent-job-secrets`.
+- **Add a new skill** — Create the source in `skills-library/<name>/SKILL.md` (the canonical store), then symlink it to activate: `ln -s ../skills-library/<name> skills/<name>`. Removing the symlink deactivates without deleting the source.
 - **No skills folder needed** — If you don't create a `skills/` directory in the agent scope, it inherits all root skills automatically.
 
 ## Self-Modification
@@ -48,9 +51,9 @@ Agents can be scoped to subdirectories under `agents/`. When scoped, the agent's
 
 **Change a schedule** — Edit `agent-job/CRONS.json` (cron expressions, enable/disable).
 
-**Add a skill** — Create a directory in `skills/` with a `SKILL.md`, update root `CLAUDE.md`.
+**Add a skill** — Create the source directory in `skills-library/<name>/` with a `SKILL.md`, then activate with `ln -s ../skills-library/<name> skills/<name>`. Update root `CLAUDE.md`.
 
-**Remove a skill** — Delete the directory from `skills/`, update root `CLAUDE.md`.
+**Remove a skill** — Delete the symlink from `skills/<name>` (deactivates without losing source). To delete permanently, also `rm -rf skills-library/<name>/`. Update root `CLAUDE.md`.
 
 **Keep CLAUDE.md files current** — When you change the structure of the instance (add/remove agents, change schedules, activate skills), update the root `CLAUDE.md` and any affected folder-level `CLAUDE.md` files so the next agent has an accurate picture.
 

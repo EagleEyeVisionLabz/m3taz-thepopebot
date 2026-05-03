@@ -9,13 +9,13 @@ agents/
 └── my-agent/
     ├── SYSTEM.md        # System prompt — identity, instructions, constraints (required)
     ├── CLAUDE.md        # Optional — guidance for AI assistants editing this agent's files
-    ├── skills/          # Optional — agent-specific skills (overrides root skills/ for this scope)
+    ├── skills/          # Optional — agent-specific skills (overrides root skills/ for this scope; symlink entries from ../../skills-library/)
     └── jobs/            # Optional — reusable task prompts referenced from CRONS.json
 ```
 
 `SYSTEM.md` is the agent's system prompt. Write it in markdown addressed to the agent (e.g. "You are a code reviewer..."). `CLAUDE.md` (if present) is read by AI assistants working in this directory — use it for non-obvious context only.
 
-**Skills resolution**: when a job runs with `scope: "agents/my-agent"`, the runtime checks `agents/my-agent/skills/` first; missing skills fall back to root `skills/`. To override a built-in skill for one agent, drop a same-named SKILL.md under that agent's `skills/`.
+**Skills resolution**: when a job runs with `scope: "agents/my-agent"`, the runtime checks `agents/my-agent/skills/` first; missing skills fall back to root `skills/`. To override a built-in skill for one agent, create the override in `skills-library/<override-name>/` and symlink it from `agents/my-agent/skills/`. To inherit a root skill into a scope, symlink it: `ln -s ../../../skills-library/agent-job-secrets agents/my-agent/skills/agent-job-secrets`.
 
 > **Important:** `agents/<name>/SYSTEM.md` **replaces** `agent-job/SYSTEM.md` when the agent is scoped — it doesn't extend it. Use `agent-job/SYSTEM.md` as a starting template and adapt it: keep the runtime environment notes, the `/tmp` scratch directive, and add the `{{skills}}` token if you want skill descriptions injected. Then add the agent's identity-specific instructions on top.
 

@@ -116,13 +116,13 @@ Each cron entry requires a `type` field — one of `agent` (spawns a Docker agen
 
 ## Skills
 
-Skills live in `skills/`. Each subdirectory with a `SKILL.md` is an active skill. All coding agents discover skills from the same `skills/` directory via symlink bridges (`.claude/skills`, `.pi/skills`, etc.).
+Skill source files live in `skills-library/<name>/` (canonical store). The `skills/` directory is the **activation surface** — each entry is a symlink to `../skills-library/<name>`, and only symlinked skills are visible to coding agents. All agents read from the same `skills/` directory via symlink bridges (`.claude/skills`, `.pi/skills`, etc.).
 
 Each skill has a `SKILL.md` with YAML frontmatter (`name`, `description`) that the agent reads to understand when and how to use it.
 
 ### Default Skills
 
-These ship with the package:
+These ship with the package and are auto-activated on first install:
 
 | Skill | Description |
 |-------|-------------|
@@ -133,7 +133,22 @@ These ship with the package:
 
 The `agent-job-dm` and `agent-job-background` skills both default `--user-id` to the running container's `USER_ID` env var, so chat-spawned jobs naturally attribute back to the originator (their completion DM lands in the right inbox).
 
-To add a custom skill, create a directory in `skills/` with a `SKILL.md`. To remove, delete the directory.
+### Adding & Removing
+
+```bash
+# Add a custom skill: source goes in skills-library/, then symlink to activate
+mkdir -p skills-library/my-skill
+# ... add SKILL.md and any scripts ...
+ln -s ../skills-library/my-skill skills/my-skill
+
+# Deactivate without losing source
+rm skills/my-skill
+
+# Permanently delete
+rm skills/my-skill && rm -rf skills-library/my-skill
+```
+
+On `npx thepopebot upgrade`, new bundled skills land in `skills-library/` un-activated — symlink them into `skills/` to opt in.
 
 ---
 
