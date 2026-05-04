@@ -183,6 +183,13 @@
       "when": 1777509249758,
       "tag": "0025_common_psylocke",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1777851748856,
+      "tag": "0026_parched_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

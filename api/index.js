@@ -182,13 +182,17 @@ async function handleListUsers() {
 /**
  * Push a stored message to the recipient's default channel.
  * On success: stamp `deliveredAt`. On failure: log; row stays undelivered.
+ * When `systemMessage` is true, channels with `systemMessagesEnabled=0` are skipped
+ * (the inbox row stays — only the channel push is muted).
  * Best-effort, async — caller does not await.
  */
-async function pushToDefaultChannel(row) {
+async function pushToDefaultChannel(row, { systemMessage = false } = {}) {
   try {
     const verified = getVerifiedChannels(row.userId);
     if (verified.length === 0) return; // No channel — row remains in inbox only
     const target = verified[0]; // Ordered by verifiedAt ASC; first verified is default
+
+    if (systemMessage && target.systemMessagesEnabled === 0) return;
 
     if (target.channel === 'telegram') {
       const botToken = getTelegramBotToken();
@@ -206,17 +210,19 @@ async function pushToDefaultChannel(row) {
 }
 
 /**
- * Dispatch a system message: store + deliver.
+ * Dispatch a message: store + deliver.
  *  - userId set → 1 row to that user, pushed to their default channel.
  *  - userId absent → fan-out: 1 row per admin where subscribedToSystemMessages=1, each pushed.
+ * `systemMessage` (default false) marks the message as a system notification (e.g. github webhook);
+ * channels with `systemMessagesEnabled=0` will not receive the push, but the inbox row is always written.
  * Returns the count of rows written.
  */
-function dispatchSystemMessage({ userId, content, payload }) {
+function dispatchMessage({ userId, content, payload, systemMessage = false }) {
   const recipients = userId ? [userId] : getSubscribedAdminIds();
   const rows = recipients.map((uid) => createSystemMessage(uid, content, payload));
   // Fire-and-forget delivery; deliveredAt updated per row when each push lands.
   for (const row of rows) {
-    pushToDefaultChannel(row);
+    pushToDefaultChannel(row, { systemMessage });
   }
   return rows.length;
 }
@@ -229,7 +235,7 @@ async function handleSendDm(request) {
     return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { user_id, message, payload } = body;
+  const { user_id, message, payload, system_message } = body;
   if (!message || typeof message !== 'string') {
     return Response.json({ error: 'Missing message' }, { status: 400 });
   }
@@ -239,7 +245,12 @@ async function handleSendDm(request) {
     if (!user) return Response.json({ error: 'User not found' }, { status: 404 });
   }
 
-  const count = dispatchSystemMessage({ userId: user_id || null, content: message, payload });
+  const count = dispatchMessage({
+    userId: user_id || null,
+    content: message,
+    payload,
+    systemMessage: system_message === true,
+  });
   return Response.json({ ok: true, recipients: count });
 }
 
@@ -366,7 +377,7 @@ async function handleGithubWebhook(request) {
 
     const message = await summarizeAgentJob(results);
     const recipientUserId = payload.user_id || null;
-    const count = dispatchSystemMessage({
+    const count = dispatchMessage({
       userId: recipientUserId,
       content: message,
       payload,

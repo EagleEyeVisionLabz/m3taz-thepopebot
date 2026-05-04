@@ -503,25 +503,15 @@ function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh, on
           <span className="text-green-500">+{diffStats?.insertions ?? 0}</span>
           <span className="text-destructive">-{diffStats?.deletions ?? 0}</span>
         </button>
-        {running && (
-          <button
-            type="button"
-            onClick={handleSpinnerClick}
-            title="View logs"
-            aria-label="View logs"
-            className="h-[28px] w-[28px] flex items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          >
-            <SpinnerIcon size={12} className="animate-spin" />
-          </button>
-        )}
         <div className="flex items-center">
           <button
             type="button"
-            onClick={handleRun}
-            disabled={running}
-            className="text-xs leading-4 px-2.5 h-[28px] font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors rounded-l-md disabled:opacity-50"
+            onClick={running ? handleSpinnerClick : handleRun}
+            title={running ? 'View logs' : undefined}
+            className="text-xs leading-4 px-2.5 h-[28px] flex items-center gap-1.5 font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors rounded-l-md cursor-pointer"
           >
-            {getCommandLabel(selectedCommand)}
+            {running && <SpinnerIcon size={12} className="animate-spin" />}
+            {getCommandLabel(running ? activeCommand : selectedCommand)}
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger>

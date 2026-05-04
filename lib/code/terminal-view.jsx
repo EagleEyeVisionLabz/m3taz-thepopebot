@@ -889,6 +889,7 @@ function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [commandOutput, setCommandOutput] = useState('');
   const [commandExitCode, setCommandExitCode] = useState(null);
+  const [activeCommand, setActiveCommand] = useState(selectedCommand);
   const [dropupOpen, setDropupOpen] = useState(false);
   const dropupRef = useRef(null);
 
@@ -909,6 +910,7 @@ function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, 
     setDialogOpen(true);
     setCommandOutput('');
     setCommandExitCode(null);
+    setActiveCommand(selectedCommand);
     try {
       const { runWorkspaceCommand } = await import('./actions.js');
       const result = await runWorkspaceCommand(codeWorkspaceId, selectedCommand);
@@ -941,14 +943,11 @@ function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, 
           <button
             className="code-toolbar-btn code-toolbar-btn--command"
             style={{ borderRadius: '6px 0 0 6px' }}
-            onClick={handleRun}
-            disabled={commandRunning}
+            onClick={commandRunning ? () => setDialogOpen(true) : handleRun}
+            title={commandRunning ? 'View logs' : undefined}
           >
-            {commandRunning ? (
-              <><SpinnerIcon size={12} /> Running...</>
-            ) : (
-              getCommandLabel(selectedCommand)
-            )}
+            {commandRunning && <SpinnerIcon size={12} />}
+            {getCommandLabel(commandRunning ? activeCommand : selectedCommand)}
           </button>
           <button
             className="code-toolbar-btn--command-chevron"
@@ -977,7 +976,7 @@ function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, 
 
       {dialogOpen && (
         <CommandOutputDialog
-          title={getCommandLabel(selectedCommand)}
+          title={getCommandLabel(activeCommand)}
           output={commandOutput}
           exitCode={commandExitCode}
           running={commandRunning}

@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { PageLayout } from './page-layout.js';
-import { KeyIcon, SendIcon, CopyIcon, CheckIcon } from './icons.js';
+import { KeyIcon, SendIcon, CopyIcon, CheckIcon, UserIcon } from './icons.js';
 import { updateProfile, updateProfileInfo } from '../../auth/actions.js';
 import {
   issueTelegramCode,
   unlinkTelegramChannel,
+  setTelegramSystemMessages,
 } from '../actions.js';
 
 const TABS = [
+  { id: 'profile', label: 'Profile', href: '/profile', icon: UserIcon },
   { id: 'login', label: 'Login', href: '/profile/login', icon: KeyIcon },
   { id: 'telegram', label: 'Telegram', href: '/profile/telegram', icon: SendIcon },
 ];
@@ -31,7 +33,9 @@ export function ProfileLayout({ session, children }) {
       {/* Tab navigation */}
       <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
         {TABS.map((tab) => {
-          const isActive = activePath === tab.href || activePath.startsWith(tab.href + '/');
+          const isActive = tab.href === '/profile'
+            ? activePath === '/profile'
+            : activePath === tab.href || activePath.startsWith(tab.href + '/');
           const Icon = tab.icon;
           return (
             <a
@@ -147,46 +151,44 @@ function ProfileInfoForm({ profile }) {
   );
 }
 
-function CredentialsForm({ session }) {
-  const [email, setEmail] = useState(session?.user?.email || '');
+function FieldLabel({ children }) {
+  return (
+    <label className="text-sm font-medium flex items-center gap-1">
+      {children}
+      <span className="text-destructive" aria-hidden>*</span>
+    </label>
+  );
+}
+
+const inputClass = 'w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground';
+
+function EmailForm({ session }) {
+  const currentEmail = session?.user?.email || '';
+  const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
 
+  const trimmed = newEmail.trim();
+  const changed = trimmed && trimmed !== currentEmail;
+  const canSubmit = changed && currentPassword && !saving;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!canSubmit) return;
     setMessage(null);
-
-    if (!currentPassword) {
-      setMessage({ type: 'error', text: 'Current password is required.' });
-      return;
-    }
-
-    if (newPassword && newPassword !== confirmPassword) {
-      setMessage({ type: 'error', text: 'New passwords do not match.' });
-      return;
-    }
-
     setSaving(true);
     try {
-      const result = await updateProfile({
-        email: email !== session?.user?.email ? email : undefined,
-        currentPassword,
-        newPassword: newPassword || undefined,
-      });
-
+      const result = await updateProfile({ email: trimmed, currentPassword });
       if (result.error) {
         setMessage({ type: 'error', text: result.error });
       } else {
-        setMessage({ type: 'success', text: 'Updated. Changes take effect on next sign-in.' });
+        setMessage({ type: 'success', text: 'Email updated. Sign in again with your new email next time.' });
+        setNewEmail('');
         setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
       }
     } catch {
-      setMessage({ type: 'error', text: 'Failed to update.' });
+      setMessage({ type: 'error', text: 'Failed to update email.' });
     } finally {
       setSaving(false);
     }
@@ -195,75 +197,153 @@ function CredentialsForm({ session }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <h2 className="text-base font-medium">Login &amp; security</h2>
+        <h2 className="text-base font-medium">Email</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Change your email or password. Requires your current password.
+          Currently <code className="text-foreground">{currentEmail}</code>. All fields required to change.
         </p>
       </div>
 
       <FormBanner message={message} />
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">Email</label>
+        <FieldLabel>New email</FieldLabel>
         <input
           type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          placeholder={currentEmail}
+          autoComplete="email"
+          className={inputClass}
         />
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">Current password</label>
+        <FieldLabel>Current password</FieldLabel>
         <input
           type="password"
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
-          placeholder="Required to change email or password"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+          autoComplete="current-password"
+          className={inputClass}
         />
       </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-medium">New password</label>
-        <input
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          placeholder="Leave blank to keep current"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
-        />
-      </div>
-
-      {newPassword && (
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Confirm new password</label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
-          />
-        </div>
-      )}
 
       <button
         type="submit"
-        disabled={saving}
-        className="rounded-md px-4 py-2 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
+        disabled={!canSubmit}
+        className="rounded-md px-4 py-2 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
       >
-        {saving ? 'Saving...' : 'Save changes'}
+        {saving ? 'Updating...' : 'Update email'}
       </button>
     </form>
   );
 }
 
-export function ProfileLoginPage({ session, profile }) {
+function PasswordForm() {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
+  const tooShort = newPassword.length > 0 && newPassword.length < 8;
+  const canSubmit =
+    currentPassword && newPassword && confirmPassword && !mismatch && !tooShort && !saving;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setMessage(null);
+    setSaving(true);
+    try {
+      const result = await updateProfile({ currentPassword, newPassword });
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        setMessage({ type: 'success', text: 'Password updated. Use your new password next sign-in.' });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update password.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <h2 className="text-base font-medium">Password</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          All fields required. Minimum 8 characters.
+        </p>
+      </div>
+
+      <FormBanner message={message} />
+
+      <div className="space-y-2">
+        <FieldLabel>Current password</FieldLabel>
+        <input
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          autoComplete="current-password"
+          className={inputClass}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <FieldLabel>New password</FieldLabel>
+        <input
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          autoComplete="new-password"
+          className={inputClass}
+        />
+        {tooShort && <p className="text-xs text-destructive">Must be at least 8 characters.</p>}
+      </div>
+
+      <div className="space-y-2">
+        <FieldLabel>Confirm new password</FieldLabel>
+        <input
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          autoComplete="new-password"
+          className={inputClass}
+        />
+        {mismatch && <p className="text-xs text-destructive">Passwords do not match.</p>}
+      </div>
+
+      <button
+        type="submit"
+        disabled={!canSubmit}
+        className="rounded-md px-4 py-2 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+      >
+        {saving ? 'Updating...' : 'Update password'}
+      </button>
+    </form>
+  );
+}
+
+export function ProfileInfoPage({ profile }) {
+  return (
+    <div className="max-w-md">
+      <ProfileInfoForm profile={profile} />
+    </div>
+  );
+}
+
+export function ProfileLoginPage({ session }) {
   return (
     <div className="max-w-md space-y-10">
-      <ProfileInfoForm profile={profile} />
+      <EmailForm session={session} />
       <div className="border-t border-border" />
-      <CredentialsForm session={session} />
+      <PasswordForm />
     </div>
   );
 }
@@ -444,6 +524,20 @@ export function ProfileTelegramPage({ initial }) {
               Linked to Telegram chat <code className="text-foreground">{state.channelChatId}</code>
             </span>
           </div>
+
+          <SystemMessagesToggle
+            enabled={state.systemMessagesEnabled !== false}
+            onChange={async (next) => {
+              setState((s) => ({ ...s, systemMessagesEnabled: next }));
+              try {
+                await setTelegramSystemMessages(next);
+              } catch {
+                setState((s) => ({ ...s, systemMessagesEnabled: !next }));
+                setError('Failed to update preference.');
+              }
+            }}
+          />
+
           <button
             type="button"
             onClick={handleUnlink}
@@ -454,6 +548,34 @@ export function ProfileTelegramPage({ initial }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function SystemMessagesToggle({ enabled, onChange }) {
+  return (
+    <div className="flex items-start justify-between gap-3 pt-2 border-t border-border">
+      <div className="text-sm">
+        <div className="font-medium">System notifications</div>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          GitHub webhook events and other system messages. Always saved to your inbox.
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        onClick={() => onChange(!enabled)}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+          enabled ? 'bg-foreground' : 'bg-border'
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-background transition-transform ${
+            enabled ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
     </div>
   );
 }

@@ -26,7 +26,7 @@ Key files: `schema.js` (source of truth), `drizzle/` (generated migrations), `dr
 | `chats` | Chat sessions (user_id, title, starred, chat_mode, code_workspace_id, timestamps) |
 | `messages` | Unified per-user inbox + chat history. `chat_id` nullable (system DMs have none); `user_id` NOT NULL; `payload`, `read`, `delivered_at` columns. Index `messages_inbox_lookup` on `(user_id, read, created_at)` drives the inbox query. |
 | `code_workspaces` | Code workspace containers (user_id, container_name, repo, branch, feature_branch, title, last_interactive_commit, coding_agent, scope, starred, has_changes) |
-| `user_channels` | Per-user channel linking (user_id, channel, channel_chat_id, code, code_expires_at, verified_at, active_thread_id) — Telegram verification + active thread. `getVerifiedChannels()` orders by `verified_at ASC`; the first verified row is the user's default channel. |
+| `user_channels` | Per-user channel linking (user_id, channel, channel_chat_id, code, code_expires_at, verified_at, active_thread_id, system_messages_enabled) — Telegram verification + active thread. `getVerifiedChannels()` orders by `verified_at ASC`; the first verified row is the user's default channel. `system_messages_enabled` (default 1) gates whether `/api/send-dm` calls with `system_message: true` push to this channel — the inbox row is always written regardless. |
 | `clusters` | Worker clusters (user_id, name, system_prompt, folders, enabled, starred) |
 | `cluster_roles` | Role definitions scoped to a cluster (cluster_id, role_name, role, trigger_config, max_concurrency, plan_mode, cleanup_worker_dir, folders) |
 | `settings` | Key-value configuration store (also stores API keys, OAuth tokens, custom LLM providers, and agent job secrets via type/key/value) |
