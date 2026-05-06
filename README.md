@@ -117,6 +117,16 @@ npm run setup                 # interactive wizard
 
 The wizard checks prerequisites, creates a GitHub repo, generates a PAT, configures your URL, and starts Docker. Visit your APP_URL when it finishes.
 
+### After setup
+
+Sign in at your APP_URL and configure these three, in order, before you can chat or run agent jobs:
+
+1. **Providers** — `/admin/event-handler/llms`. Add API keys for the LLM providers you want to use (Anthropic, OpenAI, Google, etc.). Everything else pulls from these credentials.
+2. **Helper LLM** — `/admin/event-handler/helper-llm`. Pick provider + model for one-shot calls (chat titles, agent-job titles, PR-merge summaries). Only providers with keys from step 1 appear here.
+3. **Coding agent** — `/admin/event-handler/coding-agents`. Pick which agent (Claude Code, Pi, Codex, Gemini, OpenCode, Kimi) drives live chat, code workspaces, and background agent jobs, and configure its model.
+
+Optional: connect Telegram at `/admin/event-handler/telegram` to talk to your bot from your phone.
+
 > **Local installs**: your server needs to be reachable from the internet for GitHub webhooks and Telegram. Use [ngrok](https://ngrok.com) (`ngrok http 80`). If your ngrok URL changes, run `npx thepopebot set-var APP_URL <new-url>` and re-register the Telegram webhook from `/admin/event-handler/telegram`.
 
 ---
