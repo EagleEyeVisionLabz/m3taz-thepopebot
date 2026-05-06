@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
@@ -438,19 +439,31 @@ async function main() {
   // Probe /login (not /api/ping) to confirm Next.js can actually render
   // the page, not just answer API routes. /login serves SetupForm on a
   // fresh install; LoginForm once a user exists. Either way it's HTML.
-  async function isLoginPageReady(timeoutMs = 2000) {
-    try {
-      const res = await fetch('http://localhost:80/login', {
-        method: 'GET',
-        signal: AbortSignal.timeout(timeoutMs),
-        redirect: 'manual',
-      });
-      if (!res.ok) return false;
-      const ct = res.headers.get('content-type') || '';
-      return ct.includes('text/html');
-    } catch {
-      return false;
-    }
+  // Traefik routes by Host(`${APP_HOSTNAME}`), so a bare localhost:80
+  // request hits Traefik's default 404 — set the Host header to match.
+  // node:http is used (not fetch) because undici silently strips Host.
+  const appHostname = collected.APP_HOSTNAME;
+  function isLoginPageReady(timeoutMs = 2000) {
+    return new Promise((resolve) => {
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port: 80,
+          method: 'GET',
+          path: '/login',
+          headers: { Host: appHostname },
+          timeout: timeoutMs,
+        },
+        (res) => {
+          const ok = res.statusCode === 200 && (res.headers['content-type'] || '').includes('text/html');
+          res.resume();
+          resolve(ok);
+        }
+      );
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.end();
+    });
   }
 
   let serverUp = await isLoginPageReady(3000);
