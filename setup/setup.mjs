@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process';
-import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
@@ -436,86 +435,15 @@ async function main() {
   // ─── Step 5: Start Server ─────────────────────────────────────────────
   clack.log.step(`[${++currentStep}/${TOTAL_STEPS}] Start Server`);
 
-  // Probe /login (not /api/ping) to confirm Next.js can actually render
-  // the page, not just answer API routes. /login serves SetupForm on a
-  // fresh install; LoginForm once a user exists. Either way it's HTML.
-  // Traefik routes by Host(`${APP_HOSTNAME}`), so a bare localhost:80
-  // request hits Traefik's default 404 — set the Host header to match.
-  // node:http is used (not fetch) because undici silently strips Host.
-  const appHostname = collected.APP_HOSTNAME;
-  function isLoginPageReady(timeoutMs = 2000) {
-    return new Promise((resolve) => {
-      const req = http.request(
-        {
-          host: '127.0.0.1',
-          port: 80,
-          method: 'GET',
-          path: '/login',
-          headers: { Host: appHostname },
-          timeout: timeoutMs,
-        },
-        (res) => {
-          const ok = res.statusCode === 200 && (res.headers['content-type'] || '').includes('text/html');
-          res.resume();
-          resolve(ok);
-        }
-      );
-      req.on('error', () => resolve(false));
-      req.on('timeout', () => { req.destroy(); resolve(false); });
-      req.end();
-    });
-  }
-
-  let serverUp = await isLoginPageReady(3000);
-
-  if (serverUp) {
-    if (await confirm('Server is already running. Restart?')) {
-      clack.log.info('Restarting server...');
-      try {
-        execSync('docker compose down && docker compose up -d', { stdio: 'inherit' });
-        clack.log.success('Server restarted');
-        serverUp = false; // Need to wait for it to come back up
-      } catch (err) {
-        const output = (err.stderr || err.stdout || err.message || '').toString().trim();
-        clack.log.warn('Failed to restart.');
-        if (output) clack.log.error(output);
-        clack.log.info('Fix the issue above, then run: docker compose down && docker compose up -d');
-      }
-    }
-  } else {
-    clack.log.info('Starting server...');
-    try {
-      execSync('docker compose up -d', { stdio: 'inherit' });
-      clack.log.success('Server started');
-    } catch (err) {
-      const output = (err.stderr || err.stdout || err.message || '').toString().trim();
-      clack.log.warn('Failed to start.');
-      if (output) clack.log.error(output);
-      clack.log.info('Fix the issue above, then run: docker compose up -d');
-    }
-  }
-
-  // Poll for the server to come up (max 60 seconds)
-  if (!serverUp) {
-    const pollSpinner = clack.spinner();
-    pollSpinner.start('Waiting for server to come up...');
-
-    const startTime = Date.now();
-    const timeout = 60_000;
-
-    while (Date.now() - startTime < timeout) {
-      if (await isLoginPageReady()) {
-        serverUp = true;
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-
-    if (serverUp) {
-      pollSpinner.stop('Server is up!');
-    } else {
-      pollSpinner.stop('Could not detect the server after 60 seconds.');
-    }
+  clack.log.info('Starting server...');
+  try {
+    execSync('docker compose up -d', { stdio: 'inherit' });
+    clack.log.success('Server started');
+  } catch (err) {
+    const output = (err.stderr || err.stdout || err.message || '').toString().trim();
+    clack.log.warn('Failed to start.');
+    if (output) clack.log.error(output);
+    clack.log.info('Fix the issue above, then run: docker compose up -d');
   }
 
   // ─── Done ─────────────────────────────────────────────────────────────
@@ -527,23 +455,16 @@ async function main() {
 
   clack.note(summary, 'Configuration');
 
-  // Only offer the link once the server is actually serving the login page.
-  // /admin would 401 — a fresh install has no users yet, so the root sends
-  // them to /login where the first-user setup form is shown.
-  if (serverUp) {
-    clack.log.info('Create your admin account, then configure your LLM provider, API keys, and agent settings under Admin.');
+  clack.log.info('Create your admin account, then configure your LLM provider, API keys, and agent settings under Admin.');
 
-    if (canOpenBrowser()) {
-      const open = (await import('open')).default;
-      const shouldOpen = await confirm(`Open ${appUrl} in your browser?`, true);
-      if (shouldOpen) {
-        await open(appUrl);
-      }
-    } else {
-      clack.log.info(`Visit ${appUrl} to create your admin account.`);
+  if (canOpenBrowser()) {
+    const open = (await import('open')).default;
+    const shouldOpen = await confirm(`Open ${appUrl} in your browser?`, true);
+    if (shouldOpen) {
+      await open(appUrl);
     }
   } else {
-    clack.log.warn(`Server didn't respond. Check docker logs, then visit ${appUrl} to create your admin account.`);
+    clack.log.info(`Visit ${appUrl} to create your admin account.`);
   }
 
   clack.outro('Setup complete!');
