@@ -329,6 +329,8 @@ export function ApiKeysTelegramPage() {
   // Step 2 — webhook
   const [webhookSaving, setWebhookSaving] = useState(false);
   const [webhookError, setWebhookError] = useState(null);
+  const [webhookEditing, setWebhookEditing] = useState(false);
+  const [webhookUrlInput, setWebhookUrlInput] = useState('');
 
   const loadStatus = async () => {
     try {
@@ -342,6 +344,16 @@ export function ApiKeysTelegramPage() {
   useEffect(() => {
     loadStatus();
   }, []);
+
+  // Keep the webhook URL input in sync with the saved/effective URL when not
+  // actively editing — covers the "unregistered" case where the field needs
+  // to be prefilled with the default so the user can just hit Register.
+  useEffect(() => {
+    if (!status || webhookEditing) return;
+    setWebhookUrlInput(
+      status.webhookUrlOverride || status.webhookInfo?.url || status.defaultWebhookUrl || ''
+    );
+  }, [status, webhookEditing]);
 
   if (loading) {
     return <div className="h-48 animate-pulse rounded-md bg-border/50" />;
@@ -383,10 +395,35 @@ export function ApiKeysTelegramPage() {
   const handleRegisterWebhook = async () => {
     setWebhookSaving(true);
     setWebhookError(null);
-    const result = await registerTelegramWebhook();
-    if (result?.error) setWebhookError(result.error);
+    const url = webhookEditing ? webhookUrlInput.trim() : undefined;
+    const result = await registerTelegramWebhook(url);
+    if (result?.error) {
+      setWebhookError(result.error);
+      setWebhookSaving(false);
+      return;
+    }
+    setWebhookEditing(false);
+    setWebhookUrlInput('');
     await loadStatus();
     setWebhookSaving(false);
+  };
+
+  const startWebhookEdit = () => {
+    setWebhookError(null);
+    setWebhookUrlInput(
+      status.webhookUrlOverride || status.webhookInfo?.url || status.defaultWebhookUrl || ''
+    );
+    setWebhookEditing(true);
+  };
+
+  const cancelWebhookEdit = () => {
+    setWebhookEditing(false);
+    setWebhookUrlInput('');
+    setWebhookError(null);
+  };
+
+  const resetWebhookToDefault = () => {
+    setWebhookUrlInput(status.defaultWebhookUrl || '');
   };
 
   return (
@@ -488,9 +525,9 @@ export function ApiKeysTelegramPage() {
                 <div className="min-w-0">
                   <h3 className="text-sm font-medium">Webhook</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Register your public URL with Telegram so it can deliver messages to your bot.
+                    Register a public URL with Telegram so it can deliver messages to your bot.
                   </p>
-                  {step2Done && (
+                  {step2Done && !webhookEditing && (
                     <div className="mt-2 text-xs text-muted-foreground truncate">
                       <span className="font-mono">{status.webhookInfo.url}</span>
                       {status.webhookInfo.pendingUpdates > 0 && (
@@ -506,24 +543,62 @@ export function ApiKeysTelegramPage() {
                     </div>
                   )}
                 </div>
+                {step2Done && !webhookEditing && (
+                  <button
+                    onClick={startWebhookEdit}
+                    className="shrink-0 text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                  >
+                    Change
+                  </button>
+                )}
               </div>
 
-              <div className="mt-3">
-                {webhookError && (
-                  <div className="text-xs text-destructive mb-2">{webhookError}</div>
-                )}
-                <button
-                  onClick={handleRegisterWebhook}
-                  disabled={!step1Done || webhookSaving}
-                  className="rounded-md bg-foreground text-background px-2.5 py-1.5 text-xs font-medium hover:bg-foreground/90 disabled:opacity-50 transition-colors"
-                >
-                  {webhookSaving
-                    ? 'Registering...'
-                    : step2Done
-                      ? 'Re-register Webhook'
-                      : 'Register Webhook'}
-                </button>
-              </div>
+              {(!step2Done || webhookEditing) && (
+                <div className="mt-3 flex flex-col gap-2">
+                  <input
+                    type="text"
+                    value={webhookUrlInput}
+                    onChange={(e) => {
+                      if (!webhookEditing) setWebhookEditing(true);
+                      setWebhookUrlInput(e.target.value);
+                    }}
+                    placeholder="https://example.com/api/telegram/webhook"
+                    spellCheck={false}
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-foreground"
+                  />
+                  {webhookError && <div className="text-xs text-destructive">{webhookError}</div>}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleRegisterWebhook}
+                      disabled={!step1Done || webhookSaving || !webhookUrlInput.trim()}
+                      className="rounded-md bg-foreground text-background px-2.5 py-1.5 text-xs font-medium hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                    >
+                      {webhookSaving
+                        ? 'Registering...'
+                        : step2Done
+                          ? 'Re-register Webhook'
+                          : 'Register Webhook'}
+                    </button>
+                    {webhookEditing && step2Done && (
+                      <button
+                        onClick={cancelWebhookEdit}
+                        className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    {status.defaultWebhookUrl &&
+                      webhookUrlInput.trim() !== status.defaultWebhookUrl && (
+                        <button
+                          onClick={resetWebhookToDefault}
+                          className="ml-auto text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                        >
+                          Reset to default
+                        </button>
+                      )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
