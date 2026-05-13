@@ -16,15 +16,8 @@ import { setAgentJobSecret } from '../lib/db/config.js';
 // ── Per-key lock for OAuth token refresh ────────────────────────────
 const _refreshLocks = new Map();
 
-// Bot token — resolved from DB/env
-let telegramBotToken = null;
-
-
 function getTelegramBotToken() {
-  if (!telegramBotToken) {
-    telegramBotToken = getConfig('TELEGRAM_BOT_TOKEN') || null;
-  }
-  return telegramBotToken;
+  return getConfig('TELEGRAM_BOT_TOKEN') || null;
 }
 
 
