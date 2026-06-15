@@ -480,17 +480,22 @@ async function POST(request) {
   const authError = checkAuth(routePath, request);
   if (authError) return authError;
 
-  // Fire triggers (non-blocking)
-  try {
-    const fireTriggers = getFireTriggers();
-    // Clone request to read body for triggers without consuming it for the handler
-    const clonedRequest = request.clone();
-    const body = await clonedRequest.json().catch(() => ({}));
-    const query = Object.fromEntries(url.searchParams);
-    const headers = Object.fromEntries(request.headers);
-    fireTriggers(routePath, body, query, headers);
-  } catch (e) {
-    // Trigger errors are non-fatal
+  // Fire triggers (non-blocking). Never fire on PUBLIC_ROUTES: those bypass the
+  // x-api-key gate and verify their own webhook secret *inside* the handler
+  // (which runs after this point), so firing here would execute trigger actions
+  // on unauthenticated, attacker-controlled input.
+  if (!PUBLIC_ROUTES.includes(routePath)) {
+    try {
+      const fireTriggers = getFireTriggers();
+      // Clone request to read body for triggers without consuming it for the handler
+      const clonedRequest = request.clone();
+      const body = await clonedRequest.json().catch(() => ({}));
+      const query = Object.fromEntries(url.searchParams);
+      const headers = Object.fromEntries(request.headers);
+      fireTriggers(routePath, body, query, headers);
+    } catch (e) {
+      // Trigger errors are non-fatal
+    }
   }
 
   // Cluster role webhooks
