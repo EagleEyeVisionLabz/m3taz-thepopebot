@@ -112,6 +112,14 @@ export async function listSecrets(owner, repo) {
  * Set a GitHub repository variable using gh CLI
  */
 export async function setVariable(owner, repo, name, value) {
+  // name/owner/repo are interpolated into a shell command; validate them to block
+  // command injection. `value` is passed via stdin, so it is already safe.
+  if (!/^[A-Za-z0-9_]+$/.test(name)) {
+    return { success: false, error: `Invalid variable name: ${name}` };
+  }
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)) {
+    return { success: false, error: 'Invalid owner/repo' };
+  }
   try {
     execSync(
       `gh variable set ${name} --repo ${owner}/${repo}`,
