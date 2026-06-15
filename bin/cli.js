@@ -848,6 +848,10 @@ async function upgrade() {
   }
 
   // Resolve target version
+  if (!/^[A-Za-z0-9._-]+$/.test(tag)) {
+    console.error(`\n  Invalid version/tag "${tag}".\n`);
+    process.exit(1);
+  }
   let targetVersion;
   try {
     targetVersion = execSync(`npm view thepopebot@${tag} version`, { encoding: 'utf8' }).trim();
