@@ -48,7 +48,7 @@ export function UpgradeDialog({ open, onClose, version, updateAvailable, changel
         {result === 'success' ? (
           <>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Upgrade Initiated</h3>
+              <h3 className="text-base font-semibold">Upgrade Initiated</h3>
               <button onClick={handleClose} className="text-muted-foreground hover:text-foreground">
                 <XIcon size={16} />
               </button>
@@ -105,7 +105,7 @@ export function UpgradeDialog({ open, onClose, version, updateAvailable, changel
         ) : (
           <>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Upgrade Available</h3>
+              <h3 className="text-base font-semibold">Upgrade Available</h3>
               <button onClick={handleClose} className="text-muted-foreground hover:text-foreground">
                 <XIcon size={16} />
               </button>

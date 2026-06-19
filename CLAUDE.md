@@ -109,14 +109,16 @@ SQLite via Drizzle ORM at `data/thepopebot.sqlite` (override with `DATABASE_PATH
 
 **`/api` routes are for external callers only.** They authenticate via `x-api-key` header or webhook secrets (Telegram, GitHub). Never add session/cookie auth to `/api` routes.
 
-**Browser UI uses fetch route handlers colocated with pages.** All authenticated browser-to-server calls use Next.js route handlers (`route.js` files in `web/app/`) that check `auth()` session. Do NOT use server actions for data fetching — they cause page refresh issues. Handler implementations live in `lib/chat/api.js`; route files are thin re-exports.
+**Browser UI uses fetch route handlers colocated with pages.** Authenticated browser-to-server calls use Next.js route handlers (`route.js` files in `web/app/`) that check `auth()` session. Handler implementations live in `lib/chat/api.js`; route files are thin re-exports. Prefer route handlers for chat/data-stream surfaces where server actions historically caused page-refresh issues.
+
+**Settings/admin pages may read their initial data through `'use server'` actions in `lib/chat/actions.js`** (e.g. `getCodingAgentSettings()`, `getApiKeySettings()`, `getGitHubConfig()`, `getAgentJobSecrets()`, `getGeneralSettings()`). These pages are auth-gated (`requireAuth()` for reads, `requireAdmin()` for privileged reads/mutations) and the page-refresh concern does not apply to them. This is the accepted convention — migrating these reads to route handlers is not required. Server actions are also the standard for mutations everywhere (config writes go through `requireAdmin()`).
 
 **`/stream/*` is for actual SSE streaming only.** Four endpoints use Server-Sent Events: `/stream/chat` (AI SDK streaming), `/stream/containers` (Docker container status), `/stream/containers/logs?name=<container>` (live container log tail), `/stream/cluster/[clusterId]/logs` (cluster logs). All other fetch routes are colocated with their page directories.
 
 | Caller | Mechanism | Auth | Location |
 |--------|-----------|------|----------|
 | External (cURL, GitHub Actions, Telegram) | `/api` route handler | `x-api-key` or webhook secret | `api/index.js` |
-| Browser UI (data/mutations) | Fetch route handler colocated with page | `auth()` session check | `web/app/<page>/route.js` |
+| Browser UI (data/mutations) | Fetch route handler colocated with page, OR `'use server'` action for settings/admin reads and all mutations | `auth()` session check / `requireAuth()` / `requireAdmin()` | `web/app/<page>/route.js` or `lib/chat/actions.js` |
 | Browser UI (SSE streaming) | EventSource / AI SDK streaming | `auth()` session check | `web/app/stream/` |
 
 ## Action Dispatch System

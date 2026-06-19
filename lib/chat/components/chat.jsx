@@ -38,7 +38,7 @@ const fetchCreateRepository = (name) =>
     return r.json();
   });
 
-export function Chat({ chatId, initialMessages = [], workspace = null, chatMode = null }) {
+export function Chat({ chatId, initialMessages = [], workspace = null, chatMode = null, isAdmin = false }) {
   const [input, setInput] = useState('');
   const [files, setFiles] = useState([]);
   const hasNavigated = useRef(false);
@@ -341,6 +341,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
             )}
             <div className="mt-4">
               <ChatInput
+                isAdmin={isAdmin}
                 input={input}
                 setInput={setInput}
                 onSubmit={handleSend}
@@ -472,6 +473,7 @@ export function Chat({ chatId, initialMessages = [], workspace = null, chatMode 
                 )}
                 <ChatInput
                   bare
+                  isAdmin={isAdmin}
                   input={input}
                   setInput={setInput}
                   onSubmit={handleSend}

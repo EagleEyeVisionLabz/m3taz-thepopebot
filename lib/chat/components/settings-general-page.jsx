@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getGeneralSettings, updateGeneralSetting } from '../actions.js';
+import { getGeneralSettings, updateGeneralSetting, subscribeEmailUpdates } from '../actions.js';
 import { ArrowUpCircleIcon } from './icons.js';
 import { UpgradeDialog } from './upgrade-dialog.js';
 
@@ -12,6 +12,7 @@ export function SettingsGeneralPage({ session }) {
   const [emailAddress, setEmailAddress] = useState(session?.user?.email || '');
   const [emailSigningUp, setEmailSigningUp] = useState(false);
   const [emailSubscribed, setEmailSubscribed] = useState(false);
+  const [emailError, setEmailError] = useState(null);
   const [version, setVersion] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(null);
   const [changelog, setChangelog] = useState(null);
@@ -195,28 +196,34 @@ export function SettingsGeneralPage({ session }) {
               <p className="text-sm font-medium text-green-500">Subscribed</p>
             </div>
           ) : (
-            <div className="flex gap-2">
-              <button
-                onClick={async () => {
-                  setEmailSigningUp(true);
-                  try {
-                    await fetch('https://app.convertkit.com/forms/9126548/subscriptions', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                      body: 'email_address=' + encodeURIComponent(emailAddress),
-                      redirect: 'manual',
-                    });
-                  } catch {
-                    // Never block on failure
-                  }
-                  setEmailSigningUp(false);
-                  setEmailSubscribed(true);
-                }}
-                disabled={emailSigningUp}
-                className="px-3 py-1.5 text-sm font-medium rounded-md bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
-              >
-                {emailSigningUp ? 'Signing up...' : 'Sign Up'}
-              </button>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    const trimmedEmail = emailAddress.trim();
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+                      setEmailError('Enter a valid email address.');
+                      return;
+                    }
+                    setEmailError(null);
+                    setEmailSigningUp(true);
+                    const result = await subscribeEmailUpdates(trimmedEmail);
+                    setEmailSigningUp(false);
+                    if (result?.success) {
+                      setEmailSubscribed(true);
+                    } else {
+                      setEmailError(result?.error || 'Signup failed. Please try again.');
+                    }
+                  }}
+                  disabled={emailSigningUp}
+                  className="px-3 py-1.5 text-sm font-medium rounded-md bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                >
+                  {emailSigningUp ? 'Signing up...' : 'Sign Up'}
+                </button>
+              </div>
+              {emailError && (
+                <p className="text-sm text-destructive">{emailError}</p>
+              )}
             </div>
           )}
         </div>

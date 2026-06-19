@@ -537,29 +537,13 @@ function PiCard({ settings, onReload }) {
   };
 
   // Build available providers list (builtin with keys set + custom providers)
-  const availableProviders = [];
-  if (settings?.builtinProviders && settings?.credentialStatuses) {
-    const statusMap = new Map(settings.credentialStatuses.map((s) => [s.key, s.isSet]));
-    for (const [slug, prov] of Object.entries(settings.builtinProviders)) {
-      const hasKey = prov.credentials.some((c) => statusMap.get(c.key));
-      if (hasKey) {
-        availableProviders.push({ slug, name: prov.name });
-      }
-    }
-  }
-  if (settings?.customProviders) {
-    for (const cp of settings.customProviders) {
-      availableProviders.push({ slug: cp.key, name: cp.name });
-    }
-  }
+  const availableProviders = getAvailableProviders(settings);
 
   const ready = isPiReady(settings);
   const selectedProviderReady = availableProviders.some(p => p.slug === config.provider);
 
   // Get models for selected provider — builtin models or custom provider models
-  const builtinModels = config.provider ? getAgentModels(settings, config.provider) : [];
-  const customProvider = settings?.customProviders?.find((p) => p.key === config.provider);
-  const providerModels = builtinModels.length > 0 ? builtinModels : (customProvider?.models || []).map((m) => ({ id: m, name: m }));
+  const providerModels = getProviderModels(settings, config.provider);
 
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -602,7 +586,7 @@ function PiCard({ settings, onReload }) {
                       onChange={handleModelChange}
                       className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
                     >
-                      {!customProvider && <option value="">Default</option>}
+                      {!isCustomProvider(settings, config.provider) && <option value="">Default</option>}
                       {providerModels.map((m) => (
                         <option key={m.id} value={m.id}>{m.name}</option>
                       ))}
@@ -849,29 +833,13 @@ function OpenCodeCard({ settings, onReload }) {
   };
 
   // Build available providers list (same pattern as PiCard)
-  const availableProviders = [];
-  if (settings?.builtinProviders && settings?.credentialStatuses) {
-    const statusMap = new Map(settings.credentialStatuses.map((s) => [s.key, s.isSet]));
-    for (const [slug, prov] of Object.entries(settings.builtinProviders)) {
-      const hasKey = prov.credentials.some((c) => statusMap.get(c.key));
-      if (hasKey) {
-        availableProviders.push({ slug, name: prov.name });
-      }
-    }
-  }
-  if (settings?.customProviders) {
-    for (const cp of settings.customProviders) {
-      availableProviders.push({ slug: cp.key, name: cp.name });
-    }
-  }
+  const availableProviders = getAvailableProviders(settings);
 
   const ready = isOpenCodeReady(settings);
   const selectedProviderReady = availableProviders.some(p => p.slug === config.provider);
 
   // Get models for selected provider — builtin models or custom provider models
-  const builtinModels = config.provider ? getAgentModels(settings, config.provider) : [];
-  const customProvider = settings?.customProviders?.find((p) => p.key === config.provider);
-  const providerModels = builtinModels.length > 0 ? builtinModels : (customProvider?.models || []).map((m) => ({ id: m, name: m }));
+  const providerModels = getProviderModels(settings, config.provider);
 
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -914,7 +882,7 @@ function OpenCodeCard({ settings, onReload }) {
                       onChange={handleModelChange}
                       className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
                     >
-                      {!customProvider && <option value="">Default</option>}
+                      {!isCustomProvider(settings, config.provider) && <option value="">Default</option>}
                       {providerModels.map((m) => (
                         <option key={m.id} value={m.id}>{m.name}</option>
                       ))}
@@ -1002,28 +970,12 @@ function KimiCliCard({ settings, onReload }) {
     showSaved();
   };
 
-  const availableProviders = [];
-  if (settings?.builtinProviders && settings?.credentialStatuses) {
-    const statusMap = new Map(settings.credentialStatuses.map((s) => [s.key, s.isSet]));
-    for (const [slug, prov] of Object.entries(settings.builtinProviders)) {
-      const hasKey = prov.credentials.some((c) => statusMap.get(c.key));
-      if (hasKey) {
-        availableProviders.push({ slug, name: prov.name });
-      }
-    }
-  }
-  if (settings?.customProviders) {
-    for (const cp of settings.customProviders) {
-      availableProviders.push({ slug: cp.key, name: cp.name });
-    }
-  }
+  const availableProviders = getAvailableProviders(settings);
 
   const ready = isKimiCliReady(settings);
   const selectedProviderReady = availableProviders.some(p => p.slug === config.provider);
 
-  const builtinModels = config.provider ? getAgentModels(settings, config.provider) : [];
-  const customProvider = settings?.customProviders?.find((p) => p.key === config.provider);
-  const providerModels = builtinModels.length > 0 ? builtinModels : (customProvider?.models || []).map((m) => ({ id: m, name: m }));
+  const providerModels = getProviderModels(settings, config.provider);
 
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -1123,6 +1075,51 @@ function getAgentModels(settings, providerSlug) {
   const provider = settings?.builtinProviders?.[providerSlug];
   if (!provider?.models) return [];
   return provider.models.filter((m) => m.codingAgent !== false);
+}
+
+/**
+ * Build the list of selectable providers for a multi-provider agent card:
+ * every builtin provider with at least one configured credential, plus all
+ * custom providers. Shared by the Pi / OpenCode / Kimi cards.
+ * @returns {{ slug: string, name: string }[]}
+ */
+function getAvailableProviders(settings) {
+  const available = [];
+  if (settings?.builtinProviders && settings?.credentialStatuses) {
+    const statusMap = new Map(settings.credentialStatuses.map((s) => [s.key, s.isSet]));
+    for (const [slug, prov] of Object.entries(settings.builtinProviders)) {
+      const hasKey = prov.credentials.some((c) => statusMap.get(c.key));
+      if (hasKey) {
+        available.push({ slug, name: prov.name });
+      }
+    }
+  }
+  if (settings?.customProviders) {
+    for (const cp of settings.customProviders) {
+      available.push({ slug: cp.key, name: cp.name });
+    }
+  }
+  return available;
+}
+
+/**
+ * Derive the selectable models for a chosen provider: builtin coding-agent
+ * models when available, otherwise the custom provider's model list.
+ * @returns {{ id: string, name: string }[]}
+ */
+function getProviderModels(settings, providerSlug) {
+  if (!providerSlug) return [];
+  const builtinModels = getAgentModels(settings, providerSlug);
+  if (builtinModels.length > 0) return builtinModels;
+  const customProvider = settings?.customProviders?.find((p) => p.key === providerSlug);
+  return (customProvider?.models || []).map((m) => ({ id: m, name: m }));
+}
+
+/**
+ * Whether the given provider slug is a user-defined custom provider.
+ */
+function isCustomProvider(settings, providerSlug) {
+  return !!settings?.customProviders?.some((p) => p.key === providerSlug);
 }
 
 function isClaudeCodeReady(settings) {

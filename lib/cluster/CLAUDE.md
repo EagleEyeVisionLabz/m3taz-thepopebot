@@ -30,22 +30,22 @@ data/clusters/
 
 ## Trigger Types
 
-Roles support multiple concurrent triggers. All paths use `canRunRole()` as a shared gate before calling `runClusterRole()` directly.
+Roles support multiple concurrent triggers. All paths funnel through `acquireAndRunRole()`, which atomically gates concurrency and launches the container.
 
 | Trigger | Config Key | How It Works |
 |---------|-----------|--------------|
-| Manual | (always available) | `triggerRoleManually()` → `canRunRole()` → `runClusterRole()` |
-| Webhook | (always-on) | POST → `handleClusterWebhook()` → `canRunRole()` → `runClusterRole()` |
-| Cron | `cron.schedule` | node-cron → `canRunRole()` → `runClusterRole()` |
-| File Watch | `file_watch.paths` | chokidar → `canRunRole()` → `runClusterRole()` |
+| Manual | (always available) | `triggerRoleManually()` → `acquireAndRunRole()` |
+| Webhook | (always-on) | POST → `handleClusterWebhook()` → `acquireAndRunRole()` |
+| Cron | `cron.schedule` | node-cron → `acquireAndRunRole()` |
+| File Watch | `file_watch.paths` | chokidar → `acquireAndRunRole()` |
 
 ## Concurrency & Validation
 
-`canRunRole(roleIdOrData)` is the synchronous validation function. It checks cluster enabled status and concurrency limits. Returns `{ allowed, reason?, roleData? }`. Reasons: `disabled` (cluster off), `concurrency` (at max), `not_found`.
+`acquireAndRunRole(roleIdOrData, payload?, trigger?)` is the **atomic gate** that all trigger paths actually use. It checks cluster enabled status and concurrency limits and then launches the container in one indivisible step, returning `{ allowed, reason?, containerName?, error? }`. Reasons: `disabled` (cluster off), `concurrency` (at max), `not_found`. Manual UI triggers, webhooks, cron, and file-watch all funnel through this.
 
-`acquireAndRunRole(roleId, payload?)` is the **atomic gate** that all trigger paths actually use. It calls `canRunRole()` and `runClusterRole()` together so two simultaneous triggers can't both pass the concurrency check before either container is observable to `listContainers()`. Manual UI triggers, webhooks, cron, and file-watch all funnel through this.
+Atomicity comes from a per-role promise chain held in the module-level `_locks` Map (keyed by `role.id`): each call chains onto the previous call for the same role and awaits it before running the concurrency check, so two simultaneous triggers can't both pass the check before either container is observable to `listContainers()`. Different roles still run in parallel, and idle chain entries are pruned in the `finally` block.
 
-Each role has `maxConcurrency` (default 1). `canRunRole()` counts running instances via `listContainers()`.
+Each role has `maxConcurrency` (default 1). The gate counts running instances via `countRunningForRole()` (which uses `listContainers()`).
 
 ## Plan Mode (Roles)
 
@@ -68,8 +68,8 @@ Built by `buildTemplateVars()` → `buildWorkerSystemPrompt()` + `resolveCluster
 - `clusterNaming(cluster)` → `{ project, dataDir }` for Docker resource naming
 - `clusterDir(cluster)` → absolute path to cluster data directory
 - `roleDir(cluster, role)` → absolute path to role subdirectory
-- `canRunRole(roleIdOrData)` → shared gate: checks disabled + concurrency, returns `{ allowed, reason?, roleData? }`
-- `runClusterRole(roleData, payload?)` → launches container (caller must gate with `canRunRole` first)
+- `acquireAndRunRole(roleIdOrData, payload?, trigger?)` → atomic gate: per-role serialization via `_locks`, checks disabled + concurrency, then launches; returns `{ allowed, reason?, containerName?, error? }`
+- `runClusterRole(roleData, payload?, trigger?)` → launches container (internal; called only by `acquireAndRunRole` — do not call directly)
 - `stopRoleContainers(cluster, role)` → stops all containers for a role
 - `countRunningForRole(cluster, role)` → counts running containers
 

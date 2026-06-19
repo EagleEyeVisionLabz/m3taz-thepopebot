@@ -5,7 +5,7 @@ import { getUserById } from 'thepopebot/db/users';
 
 export default async function Page() {
   const session = await auth();
-  if (!session?.user?.id) redirect('/signin');
+  if (!session?.user?.id) redirect('/login');
   const profile = getUserById(session.user.id);
   return <ProfileInfoPage profile={profile} />;
 }

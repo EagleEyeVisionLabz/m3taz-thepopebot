@@ -318,6 +318,90 @@ export function Dialog({ open, onClose, title, children, maxWidth = 'max-w-md' }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AddSecretDialog — shared manual "add a named secret" dialog
+// (Name normalized to [A-Z0-9_], masked value). Used by the GitHub Secrets page
+// and any other surface that needs to add a plain named secret. The Jobs page
+// uses an extended variant that also supports OAuth.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function AddSecretDialog({
+  open,
+  onAdd,
+  onCancel,
+  title = 'Add Secret',
+  namePlaceholder = 'MY_SECRET',
+  valuePlaceholder = 'Enter value...',
+}) {
+  const [name, setName] = useState('');
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const nameRef = useRef(null);
+
+  useEffect(() => {
+    if (open) {
+      setName('');
+      setValue('');
+      setError(null);
+      setSaving(false);
+      setTimeout(() => nameRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  const handleSave = async () => {
+    const trimmed = name.trim().toUpperCase();
+    if (!trimmed || !value) return;
+    setSaving(true);
+    setError(null);
+    const result = await onAdd(trimmed, value);
+    setSaving(false);
+    if (result?.success) {
+      onCancel();
+    } else {
+      setError(result?.error || 'Failed to add secret');
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onCancel} title={title}>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-medium mb-1 block">Name</label>
+          <input
+            ref={nameRef}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+            placeholder={namePlaceholder}
+            className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-foreground"
+            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium mb-1 block">Value</label>
+          <input
+            type="password"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={valuePlaceholder}
+            className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+          />
+        </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </div>
+      <div className="flex justify-end gap-2 mt-5">
+        <button onClick={onCancel} className="rounded-md px-3 py-1.5 text-sm font-medium border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+        <button onClick={handleSave} disabled={!name.trim() || !value || saving}
+          className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EmptyState — dashed border card with optional action
 // ─────────────────────────────────────────────────────────────────────────────
 

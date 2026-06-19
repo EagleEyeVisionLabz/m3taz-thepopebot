@@ -24,11 +24,37 @@ export async function syncConfig(env, collected, { owner, repo }) {
   const variableUpdates = [];
   const isFirstRun = !env?.GH_OWNER;
 
+  // For keys not mirrored to .env (dbSecret/secret/db-only), the current value
+  // lives in the settings DB, not in `env`. Read it so unchanged secrets aren't
+  // needlessly re-written to the DB and re-pushed to GitHub on every run.
+  // Guarded: if the DB isn't readable yet, fall back to the .env comparison.
+  let dbConfig = null;
+  try {
+    dbConfig = await import('../../lib/db/config.js');
+  } catch {
+    dbConfig = null;
+  }
+  const getStoredValue = (target, key) => {
+    if (!dbConfig) return undefined;
+    try {
+      if (target.dbSecret) return dbConfig.getConfigSecret(key);
+      if (target.db) return dbConfig.getConfigValue(key);
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  };
+
   for (const [key, value] of Object.entries(collected)) {
     const target = CONFIG_TARGETS[key];
     if (!target) continue;
 
-    const oldValue = env?.[key] ?? '';
+    let oldValue = env?.[key] ?? '';
+    // When the key isn't stored in .env, compare against the DB-stored value.
+    if (!target.env) {
+      const stored = getStoredValue(target, key);
+      if (stored != null) oldValue = stored;
+    }
     const changed = value !== oldValue;
 
     // .env — write if changed and target has env: true
