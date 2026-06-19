@@ -64,6 +64,7 @@ export function ChatPage({ session, needsSetup, chatId }) {
             // Stale chat (e.g. after login with old UUID) — start fresh
             setInitialMessages([]);
             setWorkspace(null);
+            setChatMode(null);
             setResolvedChatId(uuidv4());
             window.history.replaceState({}, '', '/');
             return;
@@ -114,6 +115,13 @@ export function ChatPage({ session, needsSetup, chatId }) {
           }
 
           setResolvedChatId(activeChatId);
+        })
+        .catch(() => {
+          // Messages fetch failed — start fresh rather than leaving stale state
+          setInitialMessages([]);
+          setWorkspace(null);
+          setChatMode(null);
+          setResolvedChatId(uuidv4());
         });
     }
   }, [activeChatId]);
@@ -139,6 +147,7 @@ export function ChatPage({ session, needsSetup, chatId }) {
               initialMessages={initialMessages}
               workspace={workspace}
               chatMode={chatMode}
+              isAdmin={session?.user?.role === 'admin'}
             />
           )}
         </SidebarInset>

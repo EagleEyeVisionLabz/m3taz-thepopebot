@@ -345,7 +345,7 @@ async function createCloudflareRecord(domain, type, value, credentials) {
 
   for (let i = 0; i < parts.length - 1; i++) {
     const candidate = parts.slice(i).join('.');
-    const resp = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${candidate}`, {
+    const resp = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${encodeURIComponent(candidate)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await resp.json();
@@ -365,7 +365,7 @@ async function createCloudflareRecord(domain, type, value, credentials) {
 
   // Check if record already exists
   const existingResp = await fetch(
-    `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records?type=${type}&name=${recordName}`,
+    `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records?type=${encodeURIComponent(type)}&name=${encodeURIComponent(recordName)}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   const existing = await existingResp.json();

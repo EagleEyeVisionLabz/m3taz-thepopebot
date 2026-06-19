@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createDirLink } from '../setup/lib/fs-utils.mjs';
+import { loadEnvFile } from '../setup/lib/env.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,27 +13,16 @@ const __dirname = path.dirname(__filename);
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
-import { MANAGED_PATHS, isManaged } from './managed-paths.js';
-
-// Files that must never be scaffolded directly (use .template suffix instead).
-const EXCLUDED_FILENAMES = ['CLAUDE.md'];
-
-// Files ending in .template are scaffolded with the suffix stripped.
-// e.g. .gitignore.template → .gitignore, CLAUDE.md.template → CLAUDE.md
-function destPath(templateRelPath) {
-  if (templateRelPath.endsWith('.template')) {
-    return templateRelPath.slice(0, -'.template'.length);
-  }
-  return templateRelPath;
-}
-
-function templatePath(userPath, templatesDir) {
-  const withSuffix = userPath + '.template';
-  if (fs.existsSync(path.join(templatesDir, withSuffix))) {
-    return withSuffix;
-  }
-  return userPath;
-}
+import {
+  MANAGED_PATHS,
+  isManaged,
+  EXCLUDED_FILENAMES,
+  destPath,
+  templatePath,
+  getTemplateFiles,
+  backupTimestamp,
+  removeEmptyDirs,
+} from './managed-paths.js';
 
 /**
  * Parse upgrade target from CLI arg into an npm install specifier.
@@ -63,26 +53,6 @@ Commands:
   set-var <KEY> [VALUE]             Set a GitHub repository variable
   user:password <email>             Change a user's password
 `);
-}
-
-/**
- * Collect all template files as relative paths.
- */
-function getTemplateFiles(templatesDir) {
-  const files = [];
-  function walk(dir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(fullPath);
-      } else if (!EXCLUDED_FILENAMES.includes(entry.name)) {
-        files.push(path.relative(templatesDir, fullPath));
-      }
-    }
-  }
-  walk(templatesDir);
-  return files;
 }
 
 async function init(options = {}) {
@@ -144,15 +114,7 @@ async function init(options = {}) {
   let backupDir = null;
   function getBackupDir() {
     if (!backupDir) {
-      const now = new Date();
-      const ts = now.getFullYear().toString()
-        + String(now.getMonth() + 1).padStart(2, '0')
-        + String(now.getDate()).padStart(2, '0')
-        + '-'
-        + String(now.getHours()).padStart(2, '0')
-        + String(now.getMinutes()).padStart(2, '0')
-        + String(now.getSeconds()).padStart(2, '0');
-      backupDir = path.join(cwd, '.backups', ts);
+      backupDir = path.join(cwd, '.backups', backupTimestamp());
     }
     return backupDir;
   }
@@ -231,19 +193,6 @@ async function init(options = {}) {
       walkUser(userDir);
 
       // Remove empty directories left behind
-      function removeEmptyDirs(dir) {
-        if (!fs.existsSync(dir)) return;
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            removeEmptyDirs(path.join(dir, entry.name));
-          }
-        }
-        // Re-read after potential child removals
-        if (fs.readdirSync(dir).length === 0) {
-          fs.rmdirSync(dir);
-        }
-      }
       removeEmptyDirs(userDir);
     }
   }
@@ -389,14 +338,7 @@ THEPOPEBOT_VERSION=${version}
  * Create a timestamped backup directory and return { dir, ts }.
  */
 function createBackupDir(cwd) {
-  const now = new Date();
-  const ts = now.getFullYear().toString()
-    + String(now.getMonth() + 1).padStart(2, '0')
-    + String(now.getDate()).padStart(2, '0')
-    + '-'
-    + String(now.getHours()).padStart(2, '0')
-    + String(now.getMinutes()).padStart(2, '0')
-    + String(now.getSeconds()).padStart(2, '0');
+  const ts = backupTimestamp();
   return { dir: path.join(cwd, '.backups', ts), ts };
 }
 
@@ -532,12 +474,18 @@ function diff(filePath) {
   }
 
   try {
-    // Use git diff for nice colored output, fall back to plain diff
-    execSync(`git diff --no-index -- "${dest}" "${src}"`, { stdio: 'inherit' });
+    // Use git diff for nice colored output (no shell — avoids path injection)
+    execFileSync('git', ['diff', '--no-index', '--', dest, src], { stdio: 'inherit' });
     console.log('\nFiles are identical.\n');
   } catch (e) {
-    // git diff exits with 1 when files differ (output already printed)
-    console.log(`\n  To reset: thepopebot reset ${filePath}\n`);
+    // git diff exits with status 1 when files differ (output already printed).
+    if (e.status === 1) {
+      console.log(`\n  To reset: thepopebot reset ${filePath}\n`);
+    } else if (e.code === 'ENOENT') {
+      console.error('\n  git is not installed or not on PATH; cannot show diff.\n');
+    } else {
+      console.error(`\n  Failed to run git diff: ${e.message}\n`);
+    }
   }
 }
 
@@ -664,7 +612,6 @@ const PROTECTED_PATHS = [
   '.backups/',
   'package-lock.json',
   'package.json',
-  'docker-compose.custom.yml',
   '.claude/',
   '.codex/',
   '.gemini/',
@@ -825,6 +772,13 @@ async function upgrade() {
   const tag = parseUpgradeTarget(args[0]);
   const { confirm, isCancel } = await import('@clack/prompts');
 
+  // Reject anything that isn't a plain npm tag / semver-ish token before it
+  // reaches any command, to prevent shell injection via the CLI argument.
+  if (!/^[A-Za-z0-9._-]+$/.test(tag)) {
+    console.error(`\n  Invalid version/tag: ${tag}\n`);
+    process.exit(1);
+  }
+
   // --- Pre-flight: verify this is a thepopebot project ---
   const pkgPath = path.join(cwd, 'package.json');
   if (!fs.existsSync(pkgPath)) {
@@ -854,7 +808,7 @@ async function upgrade() {
   }
   let targetVersion;
   try {
-    targetVersion = execSync(`npm view thepopebot@${tag} version`, { encoding: 'utf8' }).trim();
+    targetVersion = execFileSync('npm', ['view', `thepopebot@${tag}`, 'version'], { encoding: 'utf8' }).trim();
   } catch {
     console.error(`\n  Could not resolve thepopebot@${tag}. Check the version/tag and try again.\n`);
     process.exit(1);
@@ -897,7 +851,7 @@ async function upgrade() {
   // --- Install ---
   console.log(`\n  Installing thepopebot@${targetVersion}...\n`);
   try {
-    execSync(`npm install thepopebot@${targetVersion}`, { stdio: 'inherit', cwd });
+    execFileSync('npm', ['install', `thepopebot@${targetVersion}`], { stdio: 'inherit', cwd });
   } catch {
     console.error('\n  Install failed. Check your internet connection and try again.\n');
     process.exit(1);
@@ -957,16 +911,10 @@ async function upgrade() {
  * Load GH_OWNER and GH_REPO from .env
  */
 function loadRepoInfo() {
-  const envPath = path.join(process.cwd(), '.env');
-  if (!fs.existsSync(envPath)) {
+  const env = loadEnvFile(process.cwd());
+  if (!env) {
     console.error('\n  No .env file found. Run "npm run setup" first.\n');
     process.exit(1);
-  }
-  const content = fs.readFileSync(envPath, 'utf-8');
-  const env = {};
-  for (const line of content.split('\n')) {
-    const match = line.match(/^([^#=]+)=(.*)$/);
-    if (match) env[match[1].trim()] = match[2].trim();
   }
   if (!env.GH_OWNER || !env.GH_REPO) {
     console.error('\n  GH_OWNER and GH_REPO not found in .env. Run "npm run setup" first.\n');
@@ -1020,7 +968,7 @@ async function promptForValue(key) {
 async function setVar(key, value) {
   if (!key) {
     console.error('\n  Usage: thepopebot set-var <KEY> [VALUE]\n');
-    console.error('  Example: thepopebot set-var LLM_MODEL claude-sonnet-4-5-20250929\n');
+    console.error('  Example: thepopebot set-var AUTO_MERGE true\n');
     process.exit(1);
   }
 

@@ -43,7 +43,7 @@ function getEffectiveType(file) {
   return extMap[ext] || file.type || 'text/plain';
 }
 
-export function ChatInput({ input, setInput, onSubmit, status, stop, files, setFiles, disabled = false, placeholder = 'Send a message...', canSendOverride, bare = false, className, codeMode = false, codeModeSettings }) {
+export function ChatInput({ input, setInput, onSubmit, status, stop, files, setFiles, disabled = false, placeholder = 'Send a message...', canSendOverride, bare = false, className, codeMode = false, codeModeSettings, isAdmin = false }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -280,7 +280,10 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
                 <PaperclipIcon size={16} />
               </button>
 
-              {!codeMode && (
+              {/* Agent job secrets are admin-only. The KeyIcon is hidden unless
+                  the caller explicitly passes isAdmin; the server actions behind
+                  JobSecretsManager are also requireAdmin()-gated. */}
+              {!codeMode && isAdmin && (
                 <button
                   type="button"
                   onClick={() => setSecretsOpen(true)}
@@ -457,7 +460,7 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
     </form>
   );
 
-  const secretsDialog = !codeMode ? (
+  const secretsDialog = (!codeMode && isAdmin) ? (
     <Dialog
       open={secretsOpen}
       onClose={() => setSecretsOpen(false)}

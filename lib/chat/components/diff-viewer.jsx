@@ -23,9 +23,13 @@ export function DiffViewer({ workspaceId, diffStats, onClose }) {
   const diffRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
     fetch(`/code/workspace-diff/${workspaceId}/full`)
       .then(r => r.json())
       .then(r => {
+        if (cancelled) return;
         if (!r.success || !r.diff) {
           setError('No changes found');
           return;
@@ -49,8 +53,15 @@ export function DiffViewer({ workspaceId, diffStats, onClose }) {
           isDeleted: f.newName === '/dev/null',
         })));
       })
-      .catch(() => setError('Failed to load diff'))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (cancelled) return;
+        setError('Failed to load diff');
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [workspaceId, resolvedTheme]);
 
   // Close on Escape

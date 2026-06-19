@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { PlusIcon } from './icons.js';
-import { SecretRow, VariableRow, Dialog } from './settings-shared.js';
+import { SecretRow, VariableRow, Dialog, AddSecretDialog } from './settings-shared.js';
 import {
   getGitHubConfig,
   updateGitHubSecret,
@@ -17,76 +17,7 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 // Add item dialogs
 // ─────────────────────────────────────────────────────────────────────────────
-
-function AddSecretDialog({ open, onAdd, onCancel }) {
-  const [name, setName] = useState('');
-  const [value, setValue] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const nameRef = useRef(null);
-
-  useEffect(() => {
-    if (open) {
-      setName('');
-      setValue('');
-      setError(null);
-      setSaving(false);
-      setTimeout(() => nameRef.current?.focus(), 50);
-    }
-  }, [open]);
-
-  const handleSave = async () => {
-    const trimmed = name.trim().toUpperCase();
-    if (!trimmed || !value) return;
-    setSaving(true);
-    setError(null);
-    const result = await onAdd(trimmed, value);
-    setSaving(false);
-    if (result?.success) {
-      onCancel();
-    } else {
-      setError(result?.error || 'Failed to add secret');
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={onCancel} title="Add Secret">
-      <div className="space-y-3">
-        <div>
-          <label className="text-xs font-medium mb-1 block">Name</label>
-          <input
-            ref={nameRef}
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
-            placeholder="MY_SECRET"
-            className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-foreground"
-            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium mb-1 block">Value</label>
-          <input
-            type="password"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="Enter value..."
-            className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
-            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-          />
-        </div>
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </div>
-      <div className="flex justify-end gap-2 mt-5">
-        <button onClick={onCancel} className="rounded-md px-3 py-1.5 text-sm font-medium border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-        <button onClick={handleSave} disabled={!name.trim() || !value || saving}
-          className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-      </div>
-    </Dialog>
-  );
-}
+// AddSecretDialog is the shared manual secret dialog from settings-shared.js.
 
 function AddVariableDialog({ open, onAdd, onCancel }) {
   const [name, setName] = useState('');

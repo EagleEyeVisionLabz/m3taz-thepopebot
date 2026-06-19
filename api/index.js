@@ -32,9 +32,11 @@ const PUBLIC_ROUTES = ['/telegram/webhook', '/github/webhook', '/ping', '/oauth/
  */
 function safeCompare(a, b) {
   if (!a || !b) return false;
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
+  // Hash both inputs to a fixed length before comparison so timingSafeEqual
+  // always operates on equal-length buffers — this avoids leaking the expected
+  // value's length via an early length-mismatch return.
+  const bufA = createHash('sha256').update(a).digest();
+  const bufB = createHash('sha256').update(b).digest();
   return timingSafeEqual(bufA, bufB);
 }
 
@@ -76,8 +78,9 @@ function extractAgentJobId(branchName) {
 // Route handlers
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function handleCreateAgentJob(request) {
-  const body = await request.json();
+async function handleCreateAgentJob(request, parsed) {
+  if (!parsed.ok) return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
+  const body = parsed.body;
   const { agent_job } = body;
   if (!agent_job) return Response.json({ error: 'Missing agent_job field' }, { status: 400 });
 
@@ -97,6 +100,9 @@ async function handleCreateAgentJob(request) {
 
 async function handleGetAgentSecret(request) {
   const record = verifyApiKey(request.headers.get('x-api-key'));
+  if (!record) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (record.type !== 'agent_job_api_key') {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -105,8 +111,13 @@ async function handleGetAgentSecret(request) {
   if (!rawKey) return Response.json({ error: 'Missing key' }, { status: 400 });
   const key = rawKey.toUpperCase();
 
+  // Scope reads to the job/user this agent_job_api_key was issued for. A null
+  // ownerId (legacy/global keys) keeps the historical unscoped behavior so
+  // existing jobs and admin-set global secrets keep working.
+  const ownerId = record.ownerId || null;
+
   const { getAgentJobSecretRaw, setAgentJobSecret: saveSecret } = await import('../lib/db/config.js');
-  const raw = getAgentJobSecretRaw(key);
+  const raw = getAgentJobSecretRaw(key, ownerId);
   if (!raw) return Response.json({ error: 'Not found' }, { status: 404 });
 
   let parsed;
@@ -128,7 +139,7 @@ async function handleGetAgentSecret(request) {
 
     try {
       // Re-read after acquiring lock — previous request may have already refreshed
-      const freshRaw = getAgentJobSecretRaw(key);
+      const freshRaw = getAgentJobSecretRaw(key, ownerId);
       const freshParsed = freshRaw ? JSON.parse(freshRaw) : parsed;
 
       const { refreshOAuthToken } = await import('../lib/oauth/helper.js');
@@ -220,13 +231,11 @@ function dispatchMessage({ userId, content, payload, systemMessage = false }) {
   return rows.length;
 }
 
-async function handleSendDm(request) {
-  let body;
-  try {
-    body = await request.json();
-  } catch {
+async function handleSendDm(request, parsed) {
+  if (!parsed.ok) {
     return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
+  const body = parsed.body;
 
   const { user_id, message, payload, system_message } = body;
   if (!message || typeof message !== 'string') {
@@ -238,27 +247,48 @@ async function handleSendDm(request) {
     if (!user) return Response.json({ error: 'User not found' }, { status: 404 });
   }
 
-  const count = dispatchMessage({
-    userId: user_id || null,
-    content: message,
-    payload,
-    systemMessage: system_message === true,
-  });
-  return Response.json({ ok: true, recipients: count });
+  try {
+    const count = dispatchMessage({
+      userId: user_id || null,
+      content: message,
+      payload,
+      systemMessage: system_message === true,
+    });
+    return Response.json({ ok: true, recipients: count });
+  } catch (err) {
+    console.error('Failed to dispatch message:', err);
+    return Response.json({ error: 'Failed to dispatch message' }, { status: 500 });
+  }
 }
 
 async function handleListAgentSecrets(request) {
   const record = verifyApiKey(request.headers.get('x-api-key'));
+  if (!record) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (record.type !== 'agent_job_api_key') {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
   const { listAgentJobSecrets } = await import('../lib/db/config.js');
-  return Response.json({ secrets: listAgentJobSecrets() });
+  // Scope the listing to the owner this key was issued for (null = global key).
+  return Response.json({ secrets: listAgentJobSecrets(record.ownerId || null) });
 }
 
-async function handleTelegramWebhook(request) {
+async function handleTelegramWebhook(request, parsed) {
   const botToken = getTelegramBotToken();
   if (!botToken) return Response.json({ ok: true });
+
+  // Verify Telegram's webhook secret (set when registering the webhook). When a
+  // secret is configured, reject requests that don't present a matching token —
+  // otherwise the body is attacker-controlled. (audit P0: tools-integrations)
+  const tgSecret = getConfig('TELEGRAM_WEBHOOK_SECRET');
+  if (tgSecret) {
+    if (!safeCompare(request.headers.get('x-telegram-bot-api-secret-token'), tgSecret)) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // Secret verified — safe to fire user triggers registered on this route.
+    await fireRequestTriggers('/telegram/webhook', request, parsed);
+  }
 
   const adapter = getTelegramAdapter(botToken);
   const normalized = await adapter.receive(request);
@@ -338,7 +368,7 @@ async function processChannelMessage(adapter, normalized) {
   }
 }
 
-async function handleGithubWebhook(request) {
+async function handleGithubWebhook(request, parsed) {
   const GH_WEBHOOK_SECRET = getConfig('GH_WEBHOOK_SECRET');
 
   // Validate webhook secret (timing-safe, required)
@@ -346,7 +376,11 @@ async function handleGithubWebhook(request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const payload = await request.json();
+  // Secret verified — now safe to fire user triggers registered on this route.
+  await fireRequestTriggers('/github/webhook', request, parsed);
+
+  if (!parsed.ok) return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
+  const payload = parsed.body;
   const agentJobId = payload.agent_job_id || payload.job_id || extractAgentJobId(payload.branch);
   if (!agentJobId) return Response.json({ ok: true, skipped: true, reason: 'not an agent job' });
 
@@ -414,6 +448,15 @@ async function handleOAuthCallback(request) {
 
   try {
     const state = parseOAuthState(stateParam);
+
+    // Reject replayed / stale states. createOAuthState stamps an `iat` (ms);
+    // states older than OAUTH_STATE_MAX_AGE_MS are no longer accepted. States
+    // issued before this field existed (no iat) are treated as expired.
+    const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
+    if (typeof state.iat !== 'number' || Date.now() - state.iat > OAUTH_STATE_MAX_AGE_MS) {
+      return oauthResultPage(false, 'OAuth state expired. Please restart the authorization.');
+    }
+
     const redirectUri = `${process.env.AUTH_URL}/api/oauth/callback`;
 
     const tokenData = await exchangeCodeForToken({
@@ -424,26 +467,35 @@ async function handleOAuthCallback(request) {
       redirectUri,
     });
 
-    // Save token with typed wrapper so the API can auto-refresh on fetch
-    const secretType = state.secretType || 'oauth2';
+    // Save token with typed wrapper so the API can auto-refresh on fetch.
+    // Switch explicitly on state.secretType. The historical default for any
+    // unrecognized/absent value (including the UI's 'agent_job_secret') is the
+    // 'oauth2' wrapper so existing secrets keep working.
     let stored;
-    if (secretType === 'oauth_token') {
-      stored = JSON.stringify({ type: 'oauth_token', token: tokenData });
-    } else {
-      stored = JSON.stringify({
-        type: 'oauth2',
-        token: tokenData,
-        clientId: state.clientId,
-        clientSecret: state.clientSecret,
-        tokenUrl: state.tokenUrl,
-      });
+    switch (state.secretType) {
+      case 'oauth_token':
+        stored = JSON.stringify({ type: 'oauth_token', token: tokenData });
+        break;
+      case 'oauth2':
+      case 'agent_job_secret':
+      case undefined:
+      case null:
+      default:
+        stored = JSON.stringify({
+          type: 'oauth2',
+          token: tokenData,
+          clientId: state.clientId,
+          clientSecret: state.clientSecret,
+          tokenUrl: state.tokenUrl,
+        });
+        break;
     }
     setAgentJobSecret(state.secretName, stored, 'oauth');
 
     return oauthResultPage(true, state.secretName);
   } catch (err) {
     console.error('OAuth callback error:', err);
-    return oauthResultPage(false, err.message || 'Token exchange failed.');
+    return oauthResultPage(false, 'Token exchange failed.');
   }
 }
 
@@ -472,6 +524,47 @@ function oauthResultPage(success, detail) {
 // Next.js Route Handlers (catch-all)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Parse the JSON body of an incoming POST exactly once, from a clone so the
+ * original request stream remains consumable by handlers that read the raw
+ * request themselves (the Telegram adapter's `receive`, and `handleClusterWebhook`).
+ * Returns `{ ok: true, body }` on success and `{ ok: false, body: {} }` when the
+ * body is missing/malformed — callers turn `ok: false` into a 400 (handlers) or
+ * fall back to `{}` (trigger fan-out), preserving prior behavior.
+ * @param {Request} request
+ * @returns {Promise<{ ok: boolean, body: any }>}
+ */
+async function parseJsonBody(request) {
+  try {
+    const body = await request.clone().json();
+    return { ok: true, body };
+  } catch {
+    return { ok: false, body: {} };
+  }
+}
+
+// Fire webhook triggers for a request whose authenticity is ALREADY established.
+// Receives the single pre-parsed body (see parseJsonBody) so the route handler can
+// still consume the raw request stream.
+// Must never be called before the caller is authenticated — for x-api-key routes
+// that's checkAuth(); for secret-gated public webhooks it's the per-handler secret
+// check. Firing earlier lets an unauthenticated caller drive command/agent/webhook
+// actions (RCE/SSRF). (audit P0: api-external / tools-integrations)
+async function fireRequestTriggers(routePath, request, parsed) {
+  try {
+    const fireTriggers = getFireTriggers();
+    const url = new URL(request.url);
+    // Use the single pre-parsed body. Malformed JSON falls back to {} —
+    // identical to the previous `clonedRequest.json().catch(() => ({}))`.
+    const body = parsed && parsed.ok ? parsed.body : {};
+    const query = Object.fromEntries(url.searchParams);
+    const headers = Object.fromEntries(request.headers);
+    fireTriggers(routePath, body, query, headers);
+  } catch (e) {
+    // Trigger errors are non-fatal
+  }
+}
+
 async function POST(request) {
   const url = new URL(request.url);
   const routePath = url.pathname.replace(/^\/api/, '');
@@ -480,22 +573,17 @@ async function POST(request) {
   const authError = checkAuth(routePath, request);
   if (authError) return authError;
 
-  // Fire triggers (non-blocking). Never fire on PUBLIC_ROUTES: those bypass the
-  // x-api-key gate and verify their own webhook secret *inside* the handler
-  // (which runs after this point), so firing here would execute trigger actions
-  // on unauthenticated, attacker-controlled input.
+  // Parse the JSON body ONCE here (guarded so malformed JSON never throws), from a
+  // clone so the original request stream stays intact for handlers that consume the
+  // raw request themselves (Telegram adapter.receive, handleClusterWebhook). The
+  // parsed result is threaded into the trigger fan-out and into the handlers.
+  const parsed = await parseJsonBody(request);
+
+  // Fire triggers (non-blocking) ONLY for routes authenticated by checkAuth (x-api-key).
+  // Public/secret-gated webhook routes (/telegram/webhook, /github/webhook) fire their
+  // own triggers from inside their handlers, AFTER verifying the webhook secret.
   if (!PUBLIC_ROUTES.includes(routePath)) {
-    try {
-      const fireTriggers = getFireTriggers();
-      // Clone request to read body for triggers without consuming it for the handler
-      const clonedRequest = request.clone();
-      const body = await clonedRequest.json().catch(() => ({}));
-      const query = Object.fromEntries(url.searchParams);
-      const headers = Object.fromEntries(request.headers);
-      fireTriggers(routePath, body, query, headers);
-    } catch (e) {
-      // Trigger errors are non-fatal
-    }
+    await fireRequestTriggers(routePath, request, parsed);
   }
 
   // Cluster role webhooks
@@ -507,10 +595,10 @@ async function POST(request) {
 
   // Route to handler
   switch (routePath) {
-    case '/create-agent-job':     return handleCreateAgentJob(request);
-    case '/send-dm':              return handleSendDm(request);
-    case '/telegram/webhook':   return handleTelegramWebhook(request);
-    case '/github/webhook':     return handleGithubWebhook(request);
+    case '/create-agent-job':     return handleCreateAgentJob(request, parsed);
+    case '/send-dm':              return handleSendDm(request, parsed);
+    case '/telegram/webhook':   return handleTelegramWebhook(request, parsed);
+    case '/github/webhook':     return handleGithubWebhook(request, parsed);
     default:                    return Response.json({ error: 'Not found' }, { status: 404 });
   }
 }

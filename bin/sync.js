@@ -28,56 +28,23 @@
  *   6. docker compose up -d -V event-handler
  *   7. Cleanup tarball
  */
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { MANAGED_PATHS, isManaged } from './managed-paths.js';
+import {
+  MANAGED_PATHS,
+  isManaged,
+  destPath,
+  templatePath,
+  getTemplateFiles,
+  backupTimestamp,
+  removeEmptyDirs,
+} from './managed-paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PACKAGE_DIR = path.join(__dirname, '..');
-
-// Files that must never be scaffolded directly (use .template suffix instead).
-const EXCLUDED_FILENAMES = ['CLAUDE.md'];
-
-function destPath(templateRelPath) {
-  if (templateRelPath.endsWith('.template')) {
-    return templateRelPath.slice(0, -'.template'.length);
-  }
-  return templateRelPath;
-}
-
-function templatePath(userPath, templatesDir) {
-  const withSuffix = userPath + '.template';
-  if (fs.existsSync(path.join(templatesDir, withSuffix))) {
-    return withSuffix;
-  }
-  return userPath;
-}
-
-/**
- * Collect all template files as relative paths (skips symlinks).
- */
-function getTemplateFiles(templatesDir) {
-  const files = [];
-  function walk(dir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isSymbolicLink()) {
-        // Symlinks handled separately (skill activation, .claude/skills, .pi/skills)
-        continue;
-      } else if (entry.isDirectory()) {
-        walk(fullPath);
-      } else if (!EXCLUDED_FILENAMES.includes(entry.name)) {
-        files.push(path.relative(templatesDir, fullPath));
-      }
-    }
-  }
-  walk(templatesDir);
-  return files;
-}
 
 /**
  * Mirror templates into a project using the same scaffolding logic as `init`.
@@ -105,15 +72,7 @@ function mirrorTemplates(projectPath) {
   let backupDir = null;
   function getBackupDir() {
     if (!backupDir) {
-      const now = new Date();
-      const ts = now.getFullYear().toString()
-        + String(now.getMonth() + 1).padStart(2, '0')
-        + String(now.getDate()).padStart(2, '0')
-        + '-'
-        + String(now.getHours()).padStart(2, '0')
-        + String(now.getMinutes()).padStart(2, '0')
-        + String(now.getSeconds()).padStart(2, '0');
-      backupDir = path.join(projectPath, '.backups', ts);
+      backupDir = path.join(projectPath, '.backups', backupTimestamp());
     }
     return backupDir;
   }
@@ -210,19 +169,6 @@ function mirrorTemplates(projectPath) {
     walkUser(userDir);
 
     // Remove empty directories left behind (within managed dirs only)
-    function removeEmptyDirs(dir) {
-      if (!fs.existsSync(dir)) return;
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          removeEmptyDirs(path.join(dir, entry.name));
-        }
-      }
-      // Re-read after potential child removals
-      if (fs.readdirSync(dir).length === 0) {
-        fs.rmdirSync(dir);
-      }
-    }
     removeEmptyDirs(userDir);
   }
 
@@ -268,16 +214,24 @@ function buildDockerImage(projectPath) {
   let dockerfile = fs.readFileSync(dockerfilePath, 'utf8');
 
   // Add COPY for tarball after the package.json COPY line in builder stage
-  dockerfile = dockerfile.replace(
+  const afterCopy = dockerfile.replace(
     'COPY package.json package-lock.json* ./',
     'COPY package.json package-lock.json* ./\nCOPY .thepopebot-dev.tgz /tmp/thepopebot.tgz'
   );
+  if (afterCopy === dockerfile) {
+    throw new Error('buildDockerImage: failed to patch Dockerfile — the "COPY package.json package-lock.json* ./" line was not found (Dockerfile may have drifted).');
+  }
+  dockerfile = afterCopy;
 
   // Replace npm install from registry with local tarball install
-  dockerfile = dockerfile.replace(
+  const afterInstall = dockerfile.replace(
     /RUN TPB_VERSION=.*\n\s+echo.*\n\s+npm install --no-save "thepopebot@\$\{TPB_VERSION\}" tailwindcss @tailwindcss\/postcss/,
     'RUN echo \'{"private":true}\' > package.json && \\\n    npm install --no-save /tmp/thepopebot.tgz tailwindcss @tailwindcss/postcss && \\\n    rm /tmp/thepopebot.tgz'
   );
+  if (afterInstall === dockerfile) {
+    throw new Error('buildDockerImage: failed to patch Dockerfile — the registry npm install block was not found (Dockerfile may have drifted).');
+  }
+  dockerfile = afterInstall;
 
   // Read version from package.json
   const pkg = JSON.parse(fs.readFileSync(path.join(PACKAGE_DIR, 'package.json'), 'utf8'));
@@ -289,6 +243,9 @@ function buildDockerImage(projectPath) {
   const webDest = path.join(projectPath, 'web');
   const dockerSrc = path.join(PACKAGE_DIR, 'docker');
   const dockerDest = path.join(projectPath, 'docker');
+  // Only clean up directories we created — never delete pre-existing user content.
+  const webPreexisted = fs.existsSync(webDest);
+  const dockerPreexisted = fs.existsSync(dockerDest);
   fs.cpSync(webSrc, webDest, { recursive: true });
   fs.cpSync(dockerSrc, dockerDest, { recursive: true });
 
@@ -299,8 +256,8 @@ function buildDockerImage(projectPath) {
       cwd: projectPath,
     });
   } finally {
-    fs.rmSync(webDest, { recursive: true, force: true });
-    fs.rmSync(dockerDest, { recursive: true, force: true });
+    if (!webPreexisted) fs.rmSync(webDest, { recursive: true, force: true });
+    if (!dockerPreexisted) fs.rmSync(dockerDest, { recursive: true, force: true });
   }
 
   // Clean up dangling images from previous builds
@@ -357,7 +314,7 @@ export async function syncFast(projectPath) {
   mirrorTemplates(projectPath);
 
   // 3. Get running container ID
-  const container = execSync('docker compose ps -q event-handler', {
+  const container = execFileSync('docker', ['compose', 'ps', '-q', 'event-handler'], {
     encoding: 'utf8',
     cwd: projectPath,
   }).trim();
@@ -373,36 +330,36 @@ export async function syncFast(projectPath) {
 
   console.log('\n  Copying package source into container...');
   for (const dir of PACKAGE_DIRS) {
-    execSync(`docker exec ${container} rm -rf ${PKG_DEST}/${dir}`, { stdio: 'inherit' });
-    execSync(`docker cp ${path.join(PACKAGE_DIR, dir)} ${container}:${PKG_DEST}/${dir}`, { stdio: 'inherit' });
+    execFileSync('docker', ['exec', container, 'rm', '-rf', `${PKG_DEST}/${dir}`], { stdio: 'inherit' });
+    execFileSync('docker', ['cp', path.join(PACKAGE_DIR, dir), `${container}:${PKG_DEST}/${dir}`], { stdio: 'inherit' });
   }
   // Also copy package.json for exports resolution
-  execSync(`docker cp ${path.join(PACKAGE_DIR, 'package.json')} ${container}:${PKG_DEST}/package.json`, { stdio: 'inherit' });
+  execFileSync('docker', ['cp', path.join(PACKAGE_DIR, 'package.json'), `${container}:${PKG_DEST}/package.json`], { stdio: 'inherit' });
 
   // 5. Copy web/app/ source into container for next build
   const webDir = path.join(PACKAGE_DIR, 'web');
   console.log('\n  Copying web source into container...');
-  execSync(`docker cp ${path.join(webDir, 'app')} ${container}:/app/app`, { stdio: 'inherit' });
-  execSync(`docker cp ${path.join(webDir, 'postcss.config.mjs')} ${container}:/app/postcss.config.mjs`, { stdio: 'inherit' });
-  execSync(`docker cp ${path.join(webDir, 'next.config.mjs')} ${container}:/app/next.config.mjs`, { stdio: 'inherit' });
+  execFileSync('docker', ['cp', path.join(webDir, 'app'), `${container}:/app/app`], { stdio: 'inherit' });
+  execFileSync('docker', ['cp', path.join(webDir, 'postcss.config.mjs'), `${container}:/app/postcss.config.mjs`], { stdio: 'inherit' });
+  execFileSync('docker', ['cp', path.join(webDir, 'next.config.mjs'), `${container}:/app/next.config.mjs`], { stdio: 'inherit' });
 
   // 6. Run next build inside the container
   // Hide data/logs dirs so webpack's FileSystemInfo doesn't crawl them (causes OOM/RangeError
   // when workspaces contain thousands of files). Restored immediately after build.
   console.log('\n  Building Next.js inside container...');
-  execSync(`docker exec ${container} sh -c 'mv /app/data /app/.data-build-tmp 2>/dev/null; mv /app/logs /app/.logs-build-tmp 2>/dev/null; true'`, { stdio: 'inherit' });
+  execFileSync('docker', ['exec', container, 'sh', '-c', 'mv /app/data /app/.data-build-tmp 2>/dev/null; mv /app/logs /app/.logs-build-tmp 2>/dev/null; true'], { stdio: 'inherit' });
   try {
-    execSync(`docker exec ${container} ./node_modules/.bin/next build`, { stdio: 'inherit' });
+    execFileSync('docker', ['exec', container, './node_modules/.bin/next', 'build'], { stdio: 'inherit' });
   } finally {
-    execSync(`docker exec ${container} sh -c 'mv /app/.data-build-tmp /app/data 2>/dev/null; mv /app/.logs-build-tmp /app/logs 2>/dev/null; true'`, { stdio: 'inherit' });
+    execFileSync('docker', ['exec', container, 'sh', '-c', 'mv /app/.data-build-tmp /app/data 2>/dev/null; mv /app/.logs-build-tmp /app/logs 2>/dev/null; true'], { stdio: 'inherit' });
   }
 
   // 7. Clean up web source from container (not needed at runtime)
-  execSync(`docker exec ${container} rm -rf /app/app`, { stdio: 'inherit' });
+  execFileSync('docker', ['exec', container, 'rm', '-rf', '/app/app'], { stdio: 'inherit' });
 
   // 8. Restart PM2
   console.log('\n  Restarting server...');
-  execSync(`docker exec ${container} pm2 restart all`, { stdio: 'inherit' });
+  execFileSync('docker', ['exec', container, 'pm2', 'restart', 'all'], { stdio: 'inherit' });
 
   console.log('\n  Fast synced!\n');
 }

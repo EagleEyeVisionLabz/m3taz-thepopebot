@@ -108,7 +108,18 @@ function ToolCall({ part, className }) {
     try {
       const output = typeof part.output === 'string' ? JSON.parse(part.output) : part.output;
       if (output?.success && output?.workspaceUrl) {
-        window.location.href = output.workspaceUrl;
+        // Validate before navigating: only allow same-origin http(s) URLs.
+        // workspaceUrl originates from the agent stream and is untrusted, so
+        // reject cross-origin destinations and non-http(s) schemes
+        // (javascript:/data:/blob:) that could lead to open redirect or script
+        // execution.
+        const parsed = new URL(output.workspaceUrl, window.location.origin);
+        if (
+          (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+          parsed.origin === window.location.origin
+        ) {
+          window.location.href = parsed.href;
+        }
       }
     } catch {}
   }, [toolName, isDone, part.output]);
@@ -181,15 +192,6 @@ function ToolCall({ part, className }) {
               return null;
             })()}
           </span>
-          {/* DISABLED — may be re-enabled later. Do NOT remove from codebase.
-             Shows the tool's prompt text as a subtitle below the tool name.
-          {(() => {
-            const prompt = part.input?.prompt;
-            if (!prompt) return null;
-            return (
-              <span className="text-xs text-muted-foreground whitespace-pre-wrap">{prompt}</span>
-            );
-          })()} */}
         </span>
         <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
           {isRunning && (

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
@@ -143,8 +143,8 @@ async function main() {
   try { execSync('git config user.name', { stdio: 'ignore' }); } catch {
     try {
       const ghUser = JSON.parse(execSync('gh api user', { encoding: 'utf-8', env: ghEnv() }));
-      execSync(`git config --global user.name "${ghUser.name || ghUser.login}"`, { stdio: 'ignore' });
-      execSync(`git config --global user.email "${ghUser.login}@users.noreply.github.com"`, { stdio: 'ignore' });
+      execSync(`git config user.name "${ghUser.name || ghUser.login}"`, { stdio: 'ignore' });
+      execSync(`git config user.email "${ghUser.login}@users.noreply.github.com"`, { stdio: 'ignore' });
       clack.log.success('Git identity set from GitHub');
     } catch {}
   }
@@ -209,12 +209,12 @@ async function main() {
 
       try {
         const url = remoteUrl.replace(/\/$/, '').replace(/\.git$/, '') + '.git';
-        execSync(`git remote add origin "${url}"`, { stdio: 'ignore' });
+        execFileSync('git', ['remote', 'add', 'origin', url], { stdio: 'ignore' });
         remoteAdded = true;
       } catch {
         try {
           const url = remoteUrl.replace(/\/$/, '').replace(/\.git$/, '') + '.git';
-          execSync(`git remote set-url origin "${url}"`, { stdio: 'ignore' });
+          execFileSync('git', ['remote', 'set-url', 'origin', url], { stdio: 'ignore' });
           remoteAdded = true;
         } catch {
           clack.log.error('Failed to set remote. Try again.');
@@ -332,33 +332,31 @@ async function main() {
 
   // Push to GitHub now that we have the PAT
   if (needsPush) {
-    const remote = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
-
     let pushed = false;
     while (!pushed) {
-      const authedUrl = remote.replace('https://github.com/', `https://x-access-token:${pat}@github.com/`);
-      execSync(`git remote set-url origin "${authedUrl}"`, { stdio: 'ignore' });
+      // Pass credentials via an in-memory http.extraHeader so the token is
+      // never written to .git/config or embedded in the remote URL (which git
+      // can echo back in fatal/remote error messages).
+      const authHeader = `Authorization: Basic ${Buffer.from(`x-access-token:${pat}`).toString('base64')}`;
 
       const pushSpinner = clack.spinner();
       pushSpinner.start('Pushing to GitHub...');
       try {
         execSync('git branch -M main', { stdio: 'ignore' });
-        execSync('git push -u origin main 2>&1', { encoding: 'utf-8' });
+        execFileSync('git', ['-c', `http.extraHeader=${authHeader}`, 'push', '-u', 'origin', 'main'], { stdio: 'pipe' });
         pushSpinner.stop('Pushed to GitHub');
         pushed = true;
       } catch (err) {
         pushSpinner.stop('Failed to push');
-        const output = (err.stdout || '') + (err.stderr || '');
-        if (output) clack.log.error(output.trim());
-        execSync(`git remote set-url origin "${remote}"`, { stdio: 'ignore' });
+        let output = ((err.stdout || '') + (err.stderr || '')).toString().trim();
+        // Defense-in-depth: never print the PAT even if it leaks into output.
+        if (pat) output = output.split(pat).join('***');
+        if (output) clack.log.error(output);
         clack.log.info('Your PAT may not have write access to this repository.');
         pat = await promptForPAT();
         collected.GH_TOKEN = pat;
         continue;
       }
-
-      // Reset remote URL back to clean HTTPS (no token embedded)
-      execSync(`git remote set-url origin "${remote}"`, { stdio: 'ignore' });
     }
   }
 
@@ -387,6 +385,13 @@ async function main() {
         validate: (input) => {
           if (!input) return 'URL is required';
           if (!input.startsWith('https://')) return 'URL must start with https://';
+          let parsed;
+          try {
+            parsed = new URL(input);
+          } catch {
+            return 'Enter a valid URL (https://...)';
+          }
+          if (!parsed.hostname) return 'URL must include a hostname';
         },
       });
       if (clack.isCancel(urlInput)) {
@@ -398,7 +403,11 @@ async function main() {
   }
 
   collected.APP_URL = appUrl;
-  collected.APP_HOSTNAME = new URL(appUrl).hostname;
+  try {
+    collected.APP_HOSTNAME = new URL(appUrl).hostname;
+  } catch {
+    collected.APP_HOSTNAME = '';
+  }
 
   // Generate GH_WEBHOOK_SECRET if not already in DB
   let existingWebhookSecret = null;

@@ -200,12 +200,16 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
   const [selectedOption, setSelectedOption] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  // True when the server reports a client secret is already stored for this
+  // secret — lets the user re-authorize without re-entering it.
+  const [hasStoredSecret, setHasStoredSecret] = useState(false);
   const [scopes, setScopes] = useState('');
   const [redirectUri, setRedirectUri] = useState('');
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState('form'); // form | waiting | success
   const popupRef = useRef(null);
   const timeoutRef = useRef(null);
+  const messageCleanupRef = useRef(null);
 
   // Reset all state on open
   useEffect(() => {
@@ -221,18 +225,21 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
       setSelectedOption('');
       setClientId('');
       setClientSecret('');
+      setHasStoredSecret(false);
       setScopes('');
       setStatus('form');
       setCopied(false);
       setRedirectUri(`${window.location.origin}/api/oauth/callback`);
       if (!editingSecret) setTimeout(() => nameRef.current?.focus(), 50);
 
-      // Pre-fill OAuth credentials from stored secret
+      // Pre-fill OAuth metadata from stored secret. The clientSecret is never
+      // sent to the browser — the server reuses the stored value on re-authorize
+      // (initiateOAuthFlow) when the field is left blank.
       if (editingSecret?.key) {
         getOAuthSecretCredentials(editingSecret.key).then((creds) => {
           if (creds && !creds.error) {
             setClientId(creds.clientId);
-            setClientSecret(creds.clientSecret);
+            setHasStoredSecret(!!creds.hasClientSecret);
             // Auto-select provider by matching tokenUrl
             const match = PROVIDER_OPTIONS.find((o) => o.tokenUrl === creds.tokenUrl);
             if (match) setSelectedOption(match.id);
@@ -242,6 +249,10 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
     }
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (messageCleanupRef.current) {
+        messageCleanupRef.current();
+        messageCleanupRef.current = null;
+      }
     };
   }, [open]);
 
@@ -283,21 +294,21 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
     if (data?.type === 'oauth-success') {
       setStatus('success');
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (messageCleanupRef.current) messageCleanupRef.current();
       onOAuthSuccess();
       setTimeout(() => onCancel(), 1500);
     } else if (data?.type === 'oauth-error') {
       setStatus('form');
       setError(data.detail || 'Authorization failed.');
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (messageCleanupRef.current) messageCleanupRef.current();
     }
   }, [onCancel, onOAuthSuccess]);
 
-  useEffect(() => {
-    if (status === 'waiting') {
-      window.addEventListener('message', handleMessage);
-      return () => window.removeEventListener('message', handleMessage);
-    }
-  }, [status, handleMessage]);
+  // Keep the latest message handler in a ref so the listener registered
+  // synchronously in handleAuthorize always invokes current callbacks.
+  const handleMessageRef = useRef(handleMessage);
+  handleMessageRef.current = handleMessage;
 
   const handleCopyRedirectUri = () => {
     navigator.clipboard.writeText(redirectUri);
@@ -307,7 +318,9 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
 
   const handleAuthorize = async () => {
     const trimmedName = name.trim().toUpperCase();
-    if (!trimmedName || !selectedOption || !clientId || !clientSecret) return;
+    // A clientSecret must be supplied unless one is already stored server-side
+    // (re-authorize), in which case the server reuses it.
+    if (!trimmedName || !selectedOption || !clientId || (!clientSecret && !hasStoredSecret)) return;
 
     setError(null);
     const opt = PROVIDER_OPTIONS.find((o) => o.id === selectedOption);
@@ -316,7 +329,8 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
     const result = await initiateOAuthFlow({
       secretName: trimmedName,
       clientId,
-      clientSecret,
+      // Omit when empty so the server falls back to the stored secret.
+      clientSecret: clientSecret || undefined,
       tokenUrl: opt.tokenUrl,
       scopes,
       secretType: 'agent_job_secret',
@@ -339,6 +353,16 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
       prompt: 'consent',
     });
     const authorizeUrl = `${opt.authorizeUrl}?${params.toString()}`;
+
+    // Register the message listener BEFORE opening the popup so the
+    // callback's postMessage cannot arrive before the listener is attached.
+    if (messageCleanupRef.current) messageCleanupRef.current();
+    const listener = (event) => handleMessageRef.current(event);
+    window.addEventListener('message', listener);
+    messageCleanupRef.current = () => {
+      window.removeEventListener('message', listener);
+      messageCleanupRef.current = null;
+    };
 
     // Open popup
     popupRef.current = window.open(authorizeUrl, 'oauth-popup', 'width=600,height=700');
@@ -494,9 +518,12 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
                     type="password"
                     value={clientSecret}
                     onChange={(e) => setClientSecret(e.target.value)}
-                    placeholder="OAuth client secret"
+                    placeholder={hasStoredSecret ? '•••••••• (leave blank to keep existing)' : 'OAuth client secret'}
                     className={inputClass}
                   />
+                  {hasStoredSecret && (
+                    <p className="text-xs text-muted-foreground mt-1">A client secret is already stored. Leave blank to reuse it, or enter a new one to replace it.</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium mb-1 block">Scopes</label>
@@ -526,7 +553,7 @@ function AddSecretDialog({ open, onAdd, onCancel, onOAuthSuccess, editingSecret 
             ) : (
               <button
                 onClick={handleAuthorize}
-                disabled={!name.trim() || !selectedOption || !clientId || !clientSecret}
+                disabled={!name.trim() || !selectedOption || !clientId || (!clientSecret && !hasStoredSecret)}
                 className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
               >
                 Authorize

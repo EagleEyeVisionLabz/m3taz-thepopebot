@@ -48,10 +48,12 @@ export { getRepositoriesHandler as GET } from 'thepopebot/chat/api';
 
 ## Server Actions (actions.js)
 
-Used for mutations that don't need streaming responses. Settings/config writes go through `requireAdmin()`; chat/workspace CRUD uses `requireAuth()` plus user-id ownership checks. Key groups:
+Used for mutations that don't need streaming responses, **and for settings/admin page data reads** (e.g. `getCodingAgentSettings()`, `getApiKeySettings()`, `getGitHubConfig()`, `getAgentJobSecrets()`, `getGeneralSettings()`, `getTelegramStatus()`, `getRunnersStatus()`). Reading settings data through server actions is an accepted, intentional convention — the page-refresh issue that pushes chat/data-stream surfaces toward route handlers does not affect these auth-gated settings reads, and migrating them to route handlers is not required.
+
+Auth gating: privileged reads of secrets/credentials and all config writes go through `requireAdmin()` (e.g. `getAgentJobSecrets()`, `getOAuthSecretCredentials()`, `updateAgentJobSecret()`); non-sensitive settings reads use `requireAuth()`; chat/workspace CRUD uses `requireAuth()` plus user-id ownership checks. Key groups:
 
 - **Chat CRUD**: `renameChat()`, `deleteChat()`, `starChat()`
 - **Coding agents**: `getCodingAgentSettings()`, `updateCodingAgentConfig()`, `setCodingAgentDefault()`
-- **Mode defaults**: `getModeBranchDefault()`, `getModeGitActionDefault()`, `setModeDefault()` — branch/git-action/auto-run defaults per chat mode (agent vs code). `setModeDefault()` validates against `GIT_COMMAND_SET` from `lib/git-commands.js`.
+- **Mode defaults**: `getModeGitActionDefault()`, `setModeDefault()` — git-action/auto-run defaults per chat mode (agent vs code); branch defaults are read via `getCodingAgentSettings().modeDefaults`. `setModeDefault()` validates against `GIT_COMMAND_SET` from `lib/git-commands.js`.
 - **Agent job secrets**: `getAgentJobSecrets()`, `updateAgentJobSecret()`, `deleteAgentJobSecretAction()`
 - **Container management**: `getRunnersStatus()`, `stopDockerContainer()`, `startDockerContainer()`, `removeDockerContainer()`

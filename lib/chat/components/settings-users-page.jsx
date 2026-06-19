@@ -50,12 +50,10 @@ function EditUserDialog({ open, user, onSave, onCancel }) {
           <select
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            disabled={user?.isSelf}
             className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground disabled:opacity-50"
           >
             <option value="admin">Admin</option>
           </select>
-          {user?.isSelf && <p className="text-xs text-muted-foreground mt-1">Cannot change your own role.</p>}
         </div>
       </div>
       <div className="mt-5 flex justify-end gap-2">

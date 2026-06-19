@@ -14,7 +14,11 @@ app.didWebSocketSetup = true;
 
 app.prepare().then(() => {
   const server = createServer((req, res) => {
-    handle(req, res);
+    Promise.resolve(handle(req, res)).catch((err) => {
+      console.error(err);
+      if (!res.headersSent) res.statusCode = 500;
+      res.end('Internal Server Error');
+    });
   });
 
   attachCodeProxy(server);
@@ -23,4 +27,7 @@ app.prepare().then(() => {
   server.listen(port, () => {
     console.log(`> Ready on http://localhost:${port}`);
   });
+}).catch((err) => {
+  console.error('Next prepare failed', err);
+  process.exit(1);
 });

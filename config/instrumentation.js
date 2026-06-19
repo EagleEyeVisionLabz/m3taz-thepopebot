@@ -9,13 +9,22 @@
  * Or they can re-export and add their own logic.
  */
 
-let initialized = false;
+let initPromise = null;
 
 export async function register() {
-  // Only run on the server, and only once
-  if (typeof window !== 'undefined' || initialized) return;
-  initialized = true;
+  // Only run on the server, and only once. Cache the in-flight promise so a
+  // failed init does not permanently disable startup — it resets so a retry
+  // can re-run the sequence.
+  if (typeof window !== 'undefined') return;
+  if (initPromise) return initPromise;
+  initPromise = doRegister().catch((err) => {
+    initPromise = null;
+    throw err;
+  });
+  return initPromise;
+}
 
+async function doRegister() {
   // Load .env from project root
   const dotenv = await import('dotenv');
   dotenv.config();
@@ -23,7 +32,7 @@ export async function register() {
   // Skip database init and cron scheduling during `next build` —
   // these are runtime-only concerns that keep the event loop alive
   // and can cause build output corruption.
-  if (process.argv.includes('build')) return;
+  if (process.env.NEXT_PHASE === 'phase-production-build') return;
 
   // Set AUTH_URL from APP_URL so NextAuth redirects to the correct host (e.g., on sign-out)
   if (process.env.APP_URL && !process.env.AUTH_URL) {

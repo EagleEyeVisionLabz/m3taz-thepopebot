@@ -1,7 +1,7 @@
-import { execSync, exec } from 'child_process';
+import { execSync, execFileSync, exec } from 'child_process';
 import { promisify } from 'util';
 import { randomBytes } from 'crypto';
-import { ghEnv } from './prerequisites.mjs';
+import { ghEnv, getGitRemoteInfo } from './prerequisites.mjs';
 
 const execAsync = promisify(exec);
 
@@ -46,19 +46,70 @@ export async function checkPATScopes(token) {
         hasWorkflow: scopeList.includes('workflow'),
         scopes: scopeList,
         isFineGrained: false,
+        verified: true,
       };
     }
 
-    // Fine-grained tokens don't have x-oauth-scopes header
-    // We can't check permissions directly, so we assume valid if token works
+    // Fine-grained tokens don't emit x-oauth-scopes. Instead of assuming the
+    // token is fully scoped, probe the target repo and inspect the coarse
+    // `permissions` object GitHub returns. `push: true` means the token has
+    // write access (the prerequisite for creating branches/PRs and writing
+    // Contents/Actions), so we treat that as the pass signal for the setup
+    // scope gate. If the repo can't be resolved or the probe can't run, we
+    // fall back to the previous assume-valid behavior so a working token is
+    // never blocked merely because verification was impossible.
+    const remote = await getRepoPermissions(token);
+    if (remote && remote.permissions) {
+      const canWrite = remote.permissions.push === true || remote.permissions.admin === true;
+      return {
+        hasRepo: canWrite,
+        hasWorkflow: canWrite,
+        scopes: [],
+        isFineGrained: true,
+        verified: true,
+        permissions: remote.permissions,
+      };
+    }
+
+    // Could not verify (no resolvable owner/repo, or repo probe failed):
+    // assume valid so the recommended fine-grained token flow is not blocked,
+    // but flag that scopes were not actually verified.
     return {
       hasRepo: true,
       hasWorkflow: true,
       scopes: [],
       isFineGrained: true,
+      verified: false,
     };
   } catch {
-    return { hasRepo: false, hasWorkflow: false, scopes: [], isFineGrained: false };
+    return { hasRepo: false, hasWorkflow: false, scopes: [], isFineGrained: false, verified: false };
+  }
+}
+
+/**
+ * Probe the target repository's coarse permissions for a (fine-grained) token.
+ * Resolves owner/repo from the git remote so the public checkPATScopes(token)
+ * signature stays unchanged. Returns the parsed repo object (with its
+ * `permissions` field) on success, or null when the repo can't be resolved or
+ * the request fails — callers treat null as "unable to verify".
+ */
+async function getRepoPermissions(token) {
+  try {
+    const info = getGitRemoteInfo();
+    if (!info || !info.owner || !info.repo) return null;
+    const response = await fetch(
+      `https://api.github.com/repos/${info.owner}/${info.repo}`,
+      {
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+        },
+      }
+    );
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
   }
 }
 
@@ -67,44 +118,14 @@ export async function checkPATScopes(token) {
  */
 export async function setSecret(owner, repo, name, value) {
   try {
-    execSync(
-      `gh secret set ${name} --repo ${owner}/${repo}`,
+    execFileSync(
+      'gh',
+      ['secret', 'set', name, '--repo', `${owner}/${repo}`],
       { input: value, encoding: 'utf-8', env: ghEnv(), stdio: ['pipe', 'pipe', 'pipe'] }
     );
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
-  }
-}
-
-/**
- * Set multiple GitHub secrets
- */
-export async function setSecrets(owner, repo, secrets) {
-  const results = {};
-  for (const [name, value] of Object.entries(secrets)) {
-    results[name] = await setSecret(owner, repo, name, value);
-  }
-  return results;
-}
-
-/**
- * List existing secrets
- */
-export async function listSecrets(owner, repo) {
-  try {
-    const { stdout } = await execAsync(`gh secret list --repo ${owner}/${repo}`, {
-      encoding: 'utf-8',
-      env: ghEnv(),
-    });
-    const secrets = stdout
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => line.split('\t')[0]);
-    return secrets;
-  } catch {
-    return [];
   }
 }
 
@@ -121,25 +142,15 @@ export async function setVariable(owner, repo, name, value) {
     return { success: false, error: 'Invalid owner/repo' };
   }
   try {
-    execSync(
-      `gh variable set ${name} --repo ${owner}/${repo}`,
+    execFileSync(
+      'gh',
+      ['variable', 'set', name, '--repo', `${owner}/${repo}`],
       { input: value, encoding: 'utf-8', env: ghEnv(), stdio: ['pipe', 'pipe', 'pipe'] }
     );
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }
-}
-
-/**
- * Set multiple GitHub repository variables
- */
-export async function setVariables(owner, repo, variables) {
-  const results = {};
-  for (const [name, value] of Object.entries(variables)) {
-    results[name] = await setVariable(owner, repo, name, value);
-  }
-  return results;
 }
 
 /**

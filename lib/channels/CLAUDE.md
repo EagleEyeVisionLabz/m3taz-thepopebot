@@ -6,10 +6,10 @@ Abstract interface for platform integrations. Methods:
 
 | Method | Purpose | Returns |
 |--------|---------|---------|
-| `receive(request)` | Parse webhook → normalized message | `{ threadId, text, attachments, metadata }` or `null` |
+| `receive(request)` | Parse webhook → normalized message | `{ channel, channelChatId, text, attachments, metadata }` or `null` |
 | `acknowledge(metadata)` | Show receipt (e.g. emoji reaction) | void |
 | `startProcessingIndicator(metadata)` | Show typing/processing | Stop function |
-| `sendResponse(threadId, text, metadata)` | Send complete response | void |
+| `sendResponse(channelChatId, text, metadata)` | Send complete response | void |
 | `get supportsStreaming` | Can stream responses? | boolean |
 
 ## Attachment Handling — Images vs Audio
